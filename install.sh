@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
 # Agent Deck Installer
-# https://github.com/asheshgoplani/agent-deck
+# https://github.com/SaitoJP/agent-deck
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/asheshgoplani/agent-deck/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/SaitoJP/agent-deck/main/install.sh | bash
+#   ./install.sh
 #
 # Options:
 #   --name <name>       Custom binary name (default: agent-deck)
@@ -13,9 +14,10 @@
 #   --skip-tmux-config  Skip tmux configuration prompt
 #   --non-interactive   Skip all prompts (for CI/automated installs)
 #   --pkg-manager <mgr> macOS package manager: 'brew' or 'port' (default: auto-detect)
+#   --source <mode>     Install source: 'auto', 'local', or 'remote' (default: auto)
 #
 # The installer will:
-#   1. Download and install the agent-deck binary
+#   1. Build from the current checkout or download and install the agent-deck binary
 #   2. Check for tmux (offer to install if missing) - REQUIRED
 #   3. Check for jq (offer to install if missing) - Optional, for session forking
 #   4. Configure ~/.tmux.conf for mouse scrolling & clipboard - Optional
@@ -54,9 +56,10 @@ NC='\033[0m' # No Color
 BINARY_NAME="agent-deck"
 INSTALL_DIR="${HOME}/.local/bin"
 VERSION="latest"
-REPO="asheshgoplani/agent-deck"
+REPO="SaitoJP/agent-deck"
 SKIP_TMUX_CONFIG=false
 SKIP_OPTIONAL_DEPS=false
+SOURCE_MODE="auto"
 
 # macOS package manager configuration
 MACOS_SUPPORTED_PKG_MGRS=("brew" "port")  # Order matters for preference
@@ -106,6 +109,26 @@ while [[ $# -gt 0 ]]; do
             fi
             shift 2
             ;;
+        --source|--source=*)
+            if [[ "$1" == *=* ]]; then
+                SOURCE_MODE="${1#*=}"
+                shift
+            elif [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+                echo -e "${RED}Error: --source requires a value (auto, local, remote)${NC}"
+                exit 1
+            else
+                SOURCE_MODE="$2"
+                shift 2
+            fi
+            case "$SOURCE_MODE" in
+                auto|local|remote)
+                    ;;
+                *)
+                    echo -e "${RED}Error: --source must be one of: auto local remote${NC}"
+                    exit 1
+                    ;;
+            esac
+            ;;
         -h|--help)
             echo "Agent Deck Installer"
             echo ""
@@ -118,6 +141,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-tmux-config  Skip tmux configuration prompt"
             echo "  --non-interactive   Skip all prompts (for CI/automated installs)"
             echo "  --pkg-manager <mgr> macOS package manager: ${MACOS_SUPPORTED_PKG_MGRS[*]} (default: auto-detect)"
+            echo "  --source <mode>     Install source: auto, local, or remote (default: auto)"
             echo "  -h, --help          Show this help message"
             exit 0
             ;;
@@ -127,6 +151,42 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+resolve_script_dir() {
+    local script_path="${BASH_SOURCE[0]:-}"
+    if [[ -z "$script_path" || "$script_path" == "bash" || "$script_path" == /dev/fd/* || "$script_path" == /proc/self/fd/* ]]; then
+        return 1
+    fi
+
+    (
+        cd "$(dirname "$script_path")" >/dev/null 2>&1 && pwd -P
+    )
+}
+
+detect_local_source_dir() {
+    local candidate
+    candidate="$(resolve_script_dir)" || return 1
+
+    [[ -f "$candidate/go.mod" ]] || return 1
+    [[ -d "$candidate/cmd/agent-deck" ]] || return 1
+    [[ -f "$candidate/install.sh" ]] || return 1
+
+    printf '%s\n' "$candidate"
+}
+
+LOCAL_SOURCE_DIR=""
+USE_LOCAL_SOURCE=false
+if [[ "$SOURCE_MODE" != "remote" ]]; then
+    LOCAL_SOURCE_DIR="$(detect_local_source_dir 2>/dev/null || true)"
+    if [[ -n "$LOCAL_SOURCE_DIR" ]]; then
+        USE_LOCAL_SOURCE=true
+    fi
+fi
+
+if [[ "$SOURCE_MODE" == "local" && "$USE_LOCAL_SOURCE" != "true" ]]; then
+    echo -e "${RED}Error: --source=local requires running install.sh from an agent-deck checkout${NC}"
+    exit 1
+fi
 
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║        Agent Deck Installer            ║${NC}"
@@ -455,84 +515,128 @@ if ! command -v jq &> /dev/null && [[ "$SKIP_OPTIONAL_DEPS" != "true" ]]; then
     fi
 fi
 
-# Get version
-if [[ "$VERSION" == "latest" ]]; then
-    echo -e "Fetching latest version..."
-    VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [[ -z "$VERSION" ]]; then
-        echo -e "${RED}Error: Could not determine latest version${NC}"
-        echo "Please specify a version with --version"
-        exit 1
-    fi
-fi
-
-# Remove 'v' prefix if present for URL
-VERSION_NUM="${VERSION#v}"
-echo -e "Installing version: ${GREEN}${VERSION}${NC}"
-
-# Download URL
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/agent-deck_${VERSION_NUM}_${OS}_${ARCH}.tar.gz"
-echo -e "Downloading from: ${BLUE}${DOWNLOAD_URL}${NC}"
-
 # Create temp directory
 TMP_DIR=$(mktemp -d)
 trap "rm -rf $TMP_DIR" EXIT
 
-# Download and extract
-echo -e "Downloading..."
-if ! curl -fsSL "$DOWNLOAD_URL" -o "$TMP_DIR/agent-deck.tar.gz"; then
-    echo -e "${RED}Error: Download failed${NC}"
-    echo "URL: $DOWNLOAD_URL"
-    echo ""
+build_local_binary() {
+    local source_dir="$1"
+    local build_version=""
 
-    # Check if the release exists but has no assets (common when GoReleaser hasn't completed yet)
-    RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/tags/${VERSION}" 2>/dev/null || true)
-
-    # Parse asset list: prefer jq for reliability, fall back to grep
-    if command -v jq &> /dev/null && [[ -n "$RELEASE_JSON" ]]; then
-        ASSET_NAMES=$(echo "$RELEASE_JSON" | jq -r '.assets[].name // empty' 2>/dev/null || true)
-        ASSET_COUNT=$(echo "$RELEASE_JSON" | jq '.assets | length' 2>/dev/null || echo "0")
-    else
-        ASSET_NAMES=$(echo "$RELEASE_JSON" | grep '"name"' | sed 's/.*"name": *"\([^"]*\)".*/\1/' | grep '\.tar\.gz\|checksums' || true)
-        ASSET_COUNT=$(echo "$RELEASE_JSON" | grep -c '"browser_download_url"' || echo "0")
+    if ! command -v go &> /dev/null; then
+        echo -e "${RED}Error: Go is required to build from the current checkout${NC}"
+        echo "Install Go 1.24.0+ and rerun, or use --source=remote."
+        exit 1
     fi
 
-    if [[ "$ASSET_COUNT" -eq 0 ]]; then
-        echo "The release ${VERSION} exists but has no downloadable binaries."
-        echo "This usually means the release CI workflow hasn't completed yet."
-        echo "Wait a few minutes and try again, or check: https://github.com/${REPO}/actions"
-    else
-        # Release has assets, but not for this platform
-        echo "The release ${VERSION} has ${ASSET_COUNT} assets, but not for ${OS}/${ARCH}."
-        if [[ -n "$ASSET_NAMES" ]]; then
+    if [[ "$VERSION" != "latest" ]]; then
+        echo -e "${YELLOW}Note: --version is ignored when building from local source${NC}"
+    fi
+
+    build_version=$(git -C "$source_dir" describe --tags --always --dirty 2>/dev/null || true)
+    if [[ -z "$build_version" ]]; then
+        build_version=$(grep '^var Version = ' "$source_dir/cmd/agent-deck/main.go" | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
+    fi
+    if [[ -z "$build_version" ]]; then
+        build_version="dev"
+    fi
+
+    echo -e "Building from local source: ${GREEN}${source_dir}${NC}"
+    echo -e "Build version: ${GREEN}${build_version}${NC}"
+
+    export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.24.0}"
+    if ! (
+        cd "$source_dir" &&
+        go build -ldflags "-X main.Version=${build_version#v}" -o "$TMP_DIR/agent-deck" ./cmd/agent-deck
+    ); then
+        echo -e "${RED}Error: Local build failed${NC}"
+        echo "Try building manually:"
+        echo "  cd \"$source_dir\""
+        echo "  GOTOOLCHAIN=go1.24.0 go build -o ./build/agent-deck ./cmd/agent-deck"
+        exit 1
+    fi
+}
+
+download_release_binary() {
+    # Get version
+    if [[ "$VERSION" == "latest" ]]; then
+        echo -e "Fetching latest version..."
+        VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [[ -z "$VERSION" ]]; then
+            echo -e "${RED}Error: Could not determine latest version${NC}"
+            echo "Please specify a version with --version"
+            exit 1
+        fi
+    fi
+
+    # Remove 'v' prefix if present for URL
+    VERSION_NUM="${VERSION#v}"
+    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/agent-deck_${VERSION_NUM}_${OS}_${ARCH}.tar.gz"
+
+    echo -e "Installing version: ${GREEN}${VERSION}${NC}"
+    echo -e "Downloading from: ${BLUE}${DOWNLOAD_URL}${NC}"
+    echo -e "Downloading..."
+
+    if ! curl -fsSL "$DOWNLOAD_URL" -o "$TMP_DIR/agent-deck.tar.gz"; then
+        echo -e "${RED}Error: Download failed${NC}"
+        echo "URL: $DOWNLOAD_URL"
+        echo ""
+
+        # Check if the release exists but has no assets (common when GoReleaser hasn't completed yet)
+        RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/tags/${VERSION}" 2>/dev/null || true)
+
+        # Parse asset list: prefer jq for reliability, fall back to grep
+        if command -v jq &> /dev/null && [[ -n "$RELEASE_JSON" ]]; then
+            ASSET_NAMES=$(echo "$RELEASE_JSON" | jq -r '.assets[].name // empty' 2>/dev/null || true)
+            ASSET_COUNT=$(echo "$RELEASE_JSON" | jq '.assets | length' 2>/dev/null || echo "0")
+        else
+            ASSET_NAMES=$(echo "$RELEASE_JSON" | grep '"name"' | sed 's/.*"name": *"\([^"]*\)".*/\1/' | grep '\.tar\.gz\|checksums' || true)
+            ASSET_COUNT=$(echo "$RELEASE_JSON" | grep -c '"browser_download_url"' || echo "0")
+        fi
+
+        if [[ "$ASSET_COUNT" -eq 0 ]]; then
+            echo "The release ${VERSION} exists but has no downloadable binaries."
+            echo "This usually means the release CI workflow hasn't completed yet."
+            echo "Wait a few minutes and try again, or check: https://github.com/${REPO}/actions"
+        else
+            # Release has assets, but not for this platform
+            echo "The release ${VERSION} has ${ASSET_COUNT} assets, but not for ${OS}/${ARCH}."
+            if [[ -n "$ASSET_NAMES" ]]; then
+                echo ""
+                echo "Available assets:"
+                echo "$ASSET_NAMES" | while IFS= read -r name; do
+                    [[ -n "$name" ]] && echo "  - $name"
+                done
+            fi
             echo ""
-            echo "Available assets:"
-            echo "$ASSET_NAMES" | while IFS= read -r name; do
-                [[ -n "$name" ]] && echo "  - $name"
-            done
+            echo "This could mean:"
+            echo "  - The version doesn't exist for your platform"
+            echo "  - Network issues"
         fi
         echo ""
-        echo "This could mean:"
-        echo "  - The version doesn't exist for your platform"
-        echo "  - Network issues"
-    fi
-    echo ""
 
-    # Suggest Homebrew first if available (most reliable)
-    if [[ "$OS" == "darwin" ]] && command -v brew &> /dev/null; then
-        echo "Install via Homebrew instead (recommended):"
-        echo "  brew install asheshgoplani/tap/agent-deck"
-        echo ""
+        # Suggest Homebrew first if available (most reliable)
+        if [[ "$OS" == "darwin" ]] && command -v brew &> /dev/null; then
+            echo "Use the local checkout instead:"
+            echo "  ./install.sh"
+            echo ""
+        fi
+
+        echo "Or build from source:"
+        echo "  git clone https://github.com/${REPO}.git"
+        echo "  cd agent-deck && ./install.sh"
+        exit 1
     fi
 
-    echo "Or build from source:"
-    echo "  git clone https://github.com/${REPO}.git"
-    echo "  cd agent-deck && make install"
-    exit 1
+    echo -e "Extracting..."
+    tar -xzf "$TMP_DIR/agent-deck.tar.gz" -C "$TMP_DIR"
+}
+
+if [[ "$USE_LOCAL_SOURCE" == "true" ]]; then
+    build_local_binary "$LOCAL_SOURCE_DIR"
+else
+    download_release_binary
 fi
-
-echo -e "Extracting..."
-tar -xzf "$TMP_DIR/agent-deck.tar.gz" -C "$TMP_DIR"
 
 # Create install directory
 mkdir -p "$INSTALL_DIR"
@@ -673,7 +777,7 @@ configure_tmux() {
 $MARKER
 $VERSION_MARKER $CURRENT_VERSION
 # Added by agent-deck installer - $(date +%Y-%m-%d)
-# https://github.com/asheshgoplani/agent-deck
+# https://github.com/SaitoJP/agent-deck
 
 # Terminal with true color support
 set -g default-terminal \"tmux-256color\"

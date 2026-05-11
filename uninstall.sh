@@ -1,10 +1,10 @@
 #!/bin/bash
 #
 # Agent Deck Uninstaller
-# https://github.com/asheshgoplani/agent-deck
+# https://github.com/SaitoJP/agent-deck
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/asheshgoplani/agent-deck/main/uninstall.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/SaitoJP/agent-deck/main/uninstall.sh | bash
 #
 # Options:
 #   --keep-data         Keep ~/.agent-deck/ (sessions, config, logs)
@@ -303,4 +303,4 @@ fi
 
 echo ""
 echo "Thank you for using Agent Deck!"
-echo "Feedback: https://github.com/asheshgoplani/agent-deck/issues"
+echo "Feedback: https://github.com/SaitoJP/agent-deck/issues"

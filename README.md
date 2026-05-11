@@ -671,27 +671,35 @@ This is why agent-deck does not ship native SSH `-L`/`-R` forwarding: Tailscale 
 **Works on:** macOS, Linux, Windows (WSL)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/asheshgoplani/agent-deck/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/SaitoJP/agent-deck/main/install.sh | bash
 ```
 
 Then run: `agent-deck`
 
+If you already cloned this fork and want to install **the checked-out source as-is**, run:
+
+```bash
+./install.sh
+```
+
+`./install.sh` now auto-detects a local checkout and builds that source directly. Use `./install.sh --source=remote` to force the release-download path instead.
+
 <details>
 <summary>Other install methods</summary>
 
-**Homebrew**
+**Install script**
 ```bash
-brew install asheshgoplani/tap/agent-deck
+bash -lc "$(curl -fsSL https://raw.githubusercontent.com/SaitoJP/agent-deck/main/install.sh)"
 ```
 
 **Go**
 ```bash
-go install github.com/asheshgoplani/agent-deck/cmd/agent-deck@latest
+go install github.com/SaitoJP/agent-deck/cmd/agent-deck@latest
 ```
 
 **From Source**
 ```bash
-git clone https://github.com/asheshgoplani/agent-deck.git && cd agent-deck && make install
+git clone https://github.com/SaitoJP/agent-deck.git && cd agent-deck && ./install.sh
 ```
 
 </details>
