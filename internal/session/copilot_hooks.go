@@ -214,7 +214,7 @@ func buildCopilotCommand(i *Instance) string {
 	}
 
 	initialPromptFlag := ""
-	if i.IsConductor || conductorNameFromInstance(i) != "" {
+	if i.IsConductor {
 		initialPromptFlag = " -i " + shellescape.Quote(
 			"Read ./CLAUDE.md and ../CLAUDE.md if present, follow those instructions for this session, complete the startup checklist now, then report your online status briefly.",
 		)

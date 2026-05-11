@@ -113,6 +113,47 @@ func flagWasProvided(fs *flag.FlagSet, name string) bool {
 	return found
 }
 
+func buildConductorSetupSummaryData(
+	spec session.ConductorAgentSpec,
+	resolvedCopilotModel string,
+	resolvedCopilotAllowAll bool,
+	name string,
+	profile string,
+	sessionID string,
+	existed bool,
+	heartbeatEnabled bool,
+	telegramConfigured bool,
+	slackConfigured bool,
+	discordConfigured bool,
+) map[string]any {
+	data := map[string]any{
+		"success":                 true,
+		"agent":                   spec.Agent,
+		"name":                    name,
+		"profile":                 profile,
+		"session":                 sessionID,
+		"existed":                 existed,
+		"heartbeat":               heartbeatEnabled,
+		"telegram":                telegramConfigured,
+		"slack":                   slackConfigured,
+		"discord":                 discordConfigured,
+		"notifier_daemon_running": session.IsTransitionNotifierDaemonRunning(),
+	}
+	if spec.Agent == session.ConductorAgentCopilot {
+		data["model"] = resolvedCopilotModel
+		data["allow_all"] = resolvedCopilotAllowAll
+	}
+	return data
+}
+
+func conductorRuntimeLabel(agent, model string) string {
+	label := "agent:" + agent
+	if model != "" {
+		label += " model:" + model
+	}
+	return label
+}
+
 // handleConductorSetup sets up a named conductor with directories, sessions, and optionally the Telegram bridge
 func handleConductorSetup(profile string, args []string) {
 	fs := flag.NewFlagSet("conductor setup", flag.ExitOnError)
@@ -667,21 +708,19 @@ func handleConductorSetup(profile string, args []string) {
 
 	// Output summary
 	if *jsonOutput {
-		data := map[string]any{
-			"success":                 true,
-			"agent":                   spec.Agent,
-			"model":                   resolvedCopilotModel,
-			"allow_all":               resolvedCopilotAllowAll,
-			"name":                    name,
-			"profile":                 resolvedProfile,
-			"session":                 sessionID,
-			"existed":                 existed,
-			"heartbeat":               heartbeatEnabled,
-			"telegram":                telegramConfigured,
-			"slack":                   slackConfigured,
-			"discord":                 discordConfigured,
-			"notifier_daemon_running": session.IsTransitionNotifierDaemonRunning(),
-		}
+		data := buildConductorSetupSummaryData(
+			spec,
+			resolvedCopilotModel,
+			resolvedCopilotAllowAll,
+			name,
+			resolvedProfile,
+			sessionID,
+			existed,
+			heartbeatEnabled,
+			telegramConfigured,
+			slackConfigured,
+			discordConfigured,
+		)
 		if plistPath != "" {
 			data["daemon"] = plistPath
 		}
@@ -1110,11 +1149,8 @@ func handleConductorStatus(_ string, args []string) {
 			desc = fmt.Sprintf("  %q", cs.Description)
 		}
 
-		model := ""
-		if cs.Model != "" {
-			model = fmt.Sprintf(" model:%s", cs.Model)
-		}
-		fmt.Printf("  %s %s [%s] agent:%s%s heartbeat:%s  (%s)%s\n", statusIcon, cs.Name, cs.Profile, cs.Agent, model, hb, statusText, desc)
+		runtimeLabel := conductorRuntimeLabel(cs.Agent, cs.Model)
+		fmt.Printf("  %s %-12s [%-8s] %-40s heartbeat:%-3s  (%s)%s\n", statusIcon, cs.Name, cs.Profile, runtimeLabel, hb, statusText, desc)
 	}
 	fmt.Println()
 
@@ -1221,11 +1257,8 @@ func handleConductorList(profile string, args []string) {
 			desc = fmt.Sprintf("  %q", meta.Description)
 		}
 
-		model := ""
-		if meta.Model != "" {
-			model = fmt.Sprintf(" model:%s", meta.Model)
-		}
-		fmt.Printf("  %-12s [%s]  agent:%-8s%s heartbeat:%-3s  %-10s%s\n", meta.Name, meta.Profile, meta.GetAgent(), model, hb, statusText, desc)
+		runtimeLabel := conductorRuntimeLabel(meta.GetAgent(), meta.Model)
+		fmt.Printf("  %-12s [%-8s]  %-40s heartbeat:%-3s  %-10s%s\n", meta.Name, meta.Profile, runtimeLabel, hb, statusText, desc)
 	}
 	fmt.Println()
 }

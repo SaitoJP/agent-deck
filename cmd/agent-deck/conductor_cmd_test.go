@@ -4,6 +4,8 @@ import (
 	"flag"
 	"reflect"
 	"testing"
+
+	"github.com/asheshgoplani/agent-deck/internal/session"
 )
 
 func newConductorSetupFlagSet() *flag.FlagSet {
@@ -127,5 +129,60 @@ func TestParseConductorSetupArgs(t *testing.T) {
 				t.Fatalf("allow-all = %v, want %v", gotAllowAll, tt.wantAllowAll)
 			}
 		})
+	}
+}
+
+func TestBuildConductorSetupSummaryData_OmitsCopilotFieldsForNonCopilot(t *testing.T) {
+	data := buildConductorSetupSummaryData(
+		session.ConductorAgentSpec{Agent: session.ConductorAgentClaude},
+		"claude-sonnet-4.6",
+		true,
+		"ops",
+		"work",
+		"s1",
+		false,
+		true,
+		false,
+		false,
+		false,
+	)
+
+	if _, ok := data["model"]; ok {
+		t.Fatal("model should be omitted for non-copilot conductors")
+	}
+	if _, ok := data["allow_all"]; ok {
+		t.Fatal("allow_all should be omitted for non-copilot conductors")
+	}
+}
+
+func TestBuildConductorSetupSummaryData_IncludesCopilotFieldsForCopilot(t *testing.T) {
+	data := buildConductorSetupSummaryData(
+		session.ConductorAgentSpec{Agent: session.ConductorAgentCopilot},
+		"claude-sonnet-4.6",
+		true,
+		"ops",
+		"work",
+		"s1",
+		false,
+		true,
+		false,
+		false,
+		false,
+	)
+
+	if got := data["model"]; got != "claude-sonnet-4.6" {
+		t.Fatalf("model = %v, want claude-sonnet-4.6", got)
+	}
+	if got := data["allow_all"]; got != true {
+		t.Fatalf("allow_all = %v, want true", got)
+	}
+}
+
+func TestConductorRuntimeLabel(t *testing.T) {
+	if got := conductorRuntimeLabel("claude", ""); got != "agent:claude" {
+		t.Fatalf("runtime label = %q, want %q", got, "agent:claude")
+	}
+	if got := conductorRuntimeLabel("copilot", "claude-sonnet-4.6"); got != "agent:copilot model:claude-sonnet-4.6" {
+		t.Fatalf("runtime label = %q", got)
 	}
 }

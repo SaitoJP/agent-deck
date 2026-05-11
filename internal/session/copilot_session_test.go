@@ -310,6 +310,19 @@ func TestBuildCopilotCommand_FreshConductorIncludesStartupPrompt(t *testing.T) {
 	}
 }
 
+func TestBuildCopilotCommand_TitleOnlyDoesNotTriggerConductorBootstrap(t *testing.T) {
+	inst := &Instance{
+		Tool:    "copilot",
+		Command: "copilot",
+		Title:   "conductor-ops",
+	}
+
+	cmd := buildCopilotCommand(inst)
+	if strings.Contains(cmd, "CLAUDE.md") {
+		t.Fatalf("did not expect bootstrap prompt for non-conductor session, got %q", cmd)
+	}
+}
+
 func TestBuildCopilotCommand_WithModel(t *testing.T) {
 	inst := &Instance{
 		Tool:         "copilot",
