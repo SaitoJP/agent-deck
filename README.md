@@ -301,6 +301,13 @@ agent-deck conductor setup personal --description "Personal project monitor"
 # Run a conductor on Codex instead of Claude Code
 agent-deck -p work conductor setup review --agent codex --description "Codex reviewer"
 
+# Run a conductor on GitHub Copilot CLI with a specific model
+agent-deck -p work conductor setup ops-copilot \
+  --agent copilot \
+  --model claude-sonnet-4.6 \
+  --allow-all \
+  --description "Copilot ops conductor"
+
 # Use a custom agent endpoint via environment variables
 agent-deck conductor setup glm-bot \
   -env ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic \
@@ -315,11 +322,11 @@ Each conductor gets its own directory, identity, and settings:
 
 ```
 ~/.agent-deck/conductor/
-├── CLAUDE.md           # Shared knowledge for Claude conductors
+├── CLAUDE.md           # Shared knowledge for Claude/Copilot conductors
 ├── AGENTS.md           # Shared knowledge for Codex conductors
 ├── bridge.py           # Bridge daemon (Telegram/Slack, if configured)
 ├── ops/
-│   ├── CLAUDE.md       # Identity: "You are ops, a conductor for the work profile"
+│   ├── CLAUDE.md       # Identity + startup checklist for this conductor
 │   ├── meta.json       # Config: name, profile, description, env vars
 │   ├── state.json      # Runtime state
 │   └── task-log.md     # Action log
@@ -328,7 +335,17 @@ Each conductor gets its own directory, identity, and settings:
     └── meta.json
 ```
 
-Claude conductors use `CLAUDE.md`. Codex conductors use `AGENTS.md`. Shared `POLICY.md` and `LEARNINGS.md` remain agent-neutral.
+Claude and Copilot conductors use `CLAUDE.md`. Codex conductors use `AGENTS.md`. Shared `POLICY.md` and `LEARNINGS.md` remain agent-neutral. For Copilot conductors, agent-deck starts `copilot` with a bootstrap prompt that tells it to read `./CLAUDE.md` and `../CLAUDE.md`.
+
+Copilot conductor defaults can be set in `~/.agent-deck/config.toml`:
+
+```toml
+[copilot]
+default_model = "claude-sonnet-4.6"
+allow_all = true
+conductor_model = "claude-sonnet-4.6"
+conductor_allow_all = true
+```
 
 **CLI commands:**
 

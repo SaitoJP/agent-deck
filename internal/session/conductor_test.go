@@ -809,6 +809,36 @@ func TestInstallSharedConductorInstructions_AgentsCoexist(t *testing.T) {
 	}
 }
 
+func TestInstallSharedConductorInstructions_CopilotKeepsSharedClaudeMDGeneric(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	if err := InstallSharedConductorInstructions(ConductorAgentClaude, ""); err != nil {
+		t.Fatalf("InstallSharedConductorInstructions(claude) returned error: %v", err)
+	}
+
+	target := filepath.Join(tmpHome, ".agent-deck", "conductor", "CLAUDE.md")
+	before, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("failed to read shared CLAUDE.md before copilot install: %v", err)
+	}
+	if !strings.Contains(string(before), "agent-deck -p <PROFILE> add <path> -t \"Title\" -c <tool>") {
+		t.Fatal("shared CLAUDE.md should use agent-neutral session examples")
+	}
+
+	if err := InstallSharedConductorInstructions(ConductorAgentCopilot, ""); err != nil {
+		t.Fatalf("InstallSharedConductorInstructions(copilot) returned error: %v", err)
+	}
+
+	after, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("failed to read shared CLAUDE.md after copilot install: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("shared CLAUDE.md should remain stable across Claude/Copilot installs")
+	}
+}
+
 func TestSetupConductor_DefaultTemplate(t *testing.T) {
 	name := "test-default"
 	profile := "default"
@@ -894,6 +924,40 @@ func TestSetupConductorWithAgent_Codex(t *testing.T) {
 	}
 }
 
+func TestSetupConductorWithAgent_Copilot(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	name := "test-copilot"
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCopilot, true, true, "copilot conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	dir, _ := ConductorNameDir(name)
+	claudePath := filepath.Join(dir, "CLAUDE.md")
+	content, err := os.ReadFile(claudePath)
+	if err != nil {
+		t.Fatalf("failed to read CLAUDE.md: %v", err)
+	}
+	if !strings.Contains(string(content), "GitHub Copilot CLI") {
+		t.Fatal("CLAUDE.md should mention GitHub Copilot CLI")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatal("AGENTS.md should not be created for Copilot conductor")
+	}
+
+	meta, err := LoadConductorMeta(name)
+	if err != nil {
+		t.Fatalf("failed to load meta: %v", err)
+	}
+	if meta.Agent != ConductorAgentCopilot {
+		t.Fatalf("agent = %q, want %q", meta.Agent, ConductorAgentCopilot)
+	}
+	if meta.GetClearOnCompact() {
+		t.Fatal("copilot conductor should not enable clear_on_compact")
+	}
+}
+
 func TestSetupConductorWithAgent_RemovesStaleInstructionsFile(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
@@ -912,6 +976,27 @@ func TestSetupConductorWithAgent_RemovesStaleInstructionsFile(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "AGENTS.md")); err != nil {
 		t.Fatalf("AGENTS.md should exist after switching conductor agent to Codex: %v", err)
+	}
+}
+
+func TestSetupConductorWithAgent_SwitchCodexToCopilotReplacesInstructions(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	name := "switch-codex-to-copilot"
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCodex, true, true, "", "", "", "", nil, ""); err != nil {
+		t.Fatalf("failed to create initial Codex conductor: %v", err)
+	}
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCopilot, true, true, "", "", "", "", nil, ""); err != nil {
+		t.Fatalf("failed to switch conductor to Copilot: %v", err)
+	}
+
+	dir, _ := ConductorNameDir(name)
+	if _, err := os.Stat(filepath.Join(dir, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatal("AGENTS.md should be removed after switching conductor agent to Copilot")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "CLAUDE.md")); err != nil {
+		t.Fatalf("CLAUDE.md should exist after switching conductor agent to Copilot: %v", err)
 	}
 }
 

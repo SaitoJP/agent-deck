@@ -9,6 +9,8 @@ import (
 func newConductorSetupFlagSet() *flag.FlagSet {
 	fs := flag.NewFlagSet("conductor setup", flag.ContinueOnError)
 	fs.String("agent", "claude", "")
+	fs.String("model", "", "")
+	fs.Bool("allow-all", false, "")
 	fs.Bool("json", false, "")
 	fs.Bool("no-heartbeat", false, "")
 	fs.Bool("heartbeat", false, "")
@@ -22,16 +24,18 @@ func newConductorSetupFlagSet() *flag.FlagSet {
 
 func TestParseConductorSetupArgs(t *testing.T) {
 	tests := []struct {
-		name       string
-		args       []string
-		wantName   string
-		wantExtras []string
-		wantDesc   string
-		wantJSON   bool
-		wantNoHB   bool
-		wantAgent  string
-		wantInstr  string
-		wantHasErr bool
+		name         string
+		args         []string
+		wantName     string
+		wantExtras   []string
+		wantDesc     string
+		wantJSON     bool
+		wantNoHB     bool
+		wantAgent    string
+		wantModel    string
+		wantAllowAll bool
+		wantInstr    string
+		wantHasErr   bool
 	}{
 		{
 			name:     "name before string flag",
@@ -59,6 +63,14 @@ func TestParseConductorSetupArgs(t *testing.T) {
 			wantName:  "ops",
 			wantAgent: "codex",
 			wantInstr: "~/docs/ops.md",
+		},
+		{
+			name:         "copilot model flags",
+			args:         []string{"--agent", "copilot", "--model", "claude-sonnet-4.6", "--allow-all", "ops"},
+			wantName:     "ops",
+			wantAgent:    "copilot",
+			wantModel:    "claude-sonnet-4.6",
+			wantAllowAll: true,
 		},
 		{
 			name:       "extra positional args",
@@ -105,6 +117,14 @@ func TestParseConductorSetupArgs(t *testing.T) {
 			gotInstr := fs.Lookup("instructions-md").Value.String()
 			if gotInstr != tt.wantInstr {
 				t.Fatalf("instructions-md = %q, want %q", gotInstr, tt.wantInstr)
+			}
+			gotModel := fs.Lookup("model").Value.String()
+			if gotModel != tt.wantModel {
+				t.Fatalf("model = %q, want %q", gotModel, tt.wantModel)
+			}
+			gotAllowAll := fs.Lookup("allow-all").Value.String() == "true"
+			if gotAllowAll != tt.wantAllowAll {
+				t.Fatalf("allow-all = %v, want %v", gotAllowAll, tt.wantAllowAll)
 			}
 		})
 	}

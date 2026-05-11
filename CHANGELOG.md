@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Conductor now supports GitHub Copilot CLI via `conductor setup --agent copilot`, including Copilot-specific `--model` / `--allow-all` options, conductor-level `[copilot]` defaults, and `CLAUDE.md` bootstrap instructions for fresh Copilot conductor sessions.
+
 ## [1.9.0] - 2026-05-11
 
 Stability + cascade-prevention release. Closes the v1.8 flicker / silent-drop / panic-cascade bug class and the 2026-05-08 conductor-OOM cascade. Seven themed bundles from the V1.9 priority plan land here; remaining T2 / T5 / T7 longer-tail items follow in v1.9.x patches.

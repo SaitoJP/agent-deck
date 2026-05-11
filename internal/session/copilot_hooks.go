@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"al.essio.dev/pkg/shellescape"
 )
 
 // getCopilotHomeDir returns the Copilot CLI config/state directory.
@@ -211,6 +213,13 @@ func buildCopilotCommand(i *Instance) string {
 		baseCmd = "copilot"
 	}
 
+	initialPromptFlag := ""
+	if i.IsConductor || conductorNameFromInstance(i) != "" {
+		initialPromptFlag = " -i " + shellescape.Quote(
+			"Read ./CLAUDE.md and ../CLAUDE.md if present, follow those instructions for this session, complete the startup checklist now, then report your online status briefly.",
+		)
+	}
+
 	// If we already have a session ID with conversation data, resume
 	if i.CopilotSessionID != "" && copilotSessionHasConversationData(i.CopilotSessionID) {
 		sessionLog.Info("copilot resume",
@@ -233,10 +242,11 @@ func buildCopilotCommand(i *Instance) string {
 		slog.String("reason", "fresh_session"),
 	)
 	return envPrefix + fmt.Sprintf(
-		"%s%s%s",
+		"%s%s%s%s",
 		baseCmd,
 		modelFlag,
 		allowAllFlag,
+		initialPromptFlag,
 	)
 }
 

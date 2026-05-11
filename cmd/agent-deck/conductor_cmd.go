@@ -103,12 +103,24 @@ func parseConductorSetupArgs(fs *flag.FlagSet, args []string) (string, []string,
 	return remaining[0], remaining[1:], nil
 }
 
+func flagWasProvided(fs *flag.FlagSet, name string) bool {
+	found := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
+}
+
 // handleConductorSetup sets up a named conductor with directories, sessions, and optionally the Telegram bridge
 func handleConductorSetup(profile string, args []string) {
 	fs := flag.NewFlagSet("conductor setup", flag.ExitOnError)
-	agent := fs.String("agent", session.ConductorAgentClaude, "Conductor agent runtime (claude or codex)")
+	agent := fs.String("agent", session.ConductorAgentClaude, "Conductor agent runtime (claude, codex, or copilot)")
 	noClearOnCompact := fs.Bool("no-clear-on-compact", false, "Claude-only: allow normal compaction instead of /clear when context fills up")
 	description := fs.String("description", "", "Description for this conductor")
+	model := fs.String("model", "", "Copilot-only: model for this conductor (e.g. claude-sonnet-4.6)")
+	allowAll := fs.Bool("allow-all", false, "Copilot-only: start conductor with --allow-all")
 	heartbeat := fs.Bool("heartbeat", false, "Enable heartbeat for this conductor (default)")
 	noHeartbeat := fs.Bool("no-heartbeat", false, "Disable heartbeat for this conductor")
 	instructionsMD := fs.String("instructions-md", "", "Custom instructions file for this conductor (agent-specific, e.g., ~/docs/conductor-ops.md)")
@@ -134,7 +146,11 @@ func handleConductorSetup(profile string, args []string) {
 		fmt.Println()
 		fmt.Println("Options:")
 		fmt.Println("  -agent string")
-		fmt.Println("        Conductor agent runtime: claude or codex (default \"claude\")")
+		fmt.Println("        Conductor agent runtime: claude, codex, or copilot (default \"claude\")")
+		fmt.Println("  -model string")
+		fmt.Println("        Copilot-only: model for this conductor (e.g. claude-sonnet-4.6)")
+		fmt.Println("  -allow-all")
+		fmt.Println("        Copilot-only: start conductor with --allow-all")
 		fmt.Println("  -description string")
 		fmt.Println("        Description for this conductor")
 		fmt.Println("  -heartbeat")
@@ -148,7 +164,7 @@ func handleConductorSetup(profile string, args []string) {
 		fmt.Println("  -instructions-md string")
 		fmt.Println("        Custom instructions file for this conductor (agent-specific)")
 		fmt.Println("  -claude-md string")
-		fmt.Println("        Deprecated Claude-only alias for -instructions-md")
+		fmt.Println("        Deprecated alias for -instructions-md when the agent uses CLAUDE.md")
 		fmt.Println("  -policy-md string")
 		fmt.Println("        Custom POLICY.md for this conductor (e.g., ~/docs/my-policy.md)")
 		fmt.Println("  -heartbeat-rules-md string")
@@ -158,7 +174,7 @@ func handleConductorSetup(profile string, args []string) {
 		fmt.Println("  -shared-instructions-md string")
 		fmt.Println("        Custom shared instructions file for all conductors of this agent")
 		fmt.Println("  -shared-claude-md string")
-		fmt.Println("        Deprecated Claude-only alias for -shared-instructions-md")
+		fmt.Println("        Deprecated alias for -shared-instructions-md when the agent uses CLAUDE.md")
 		fmt.Println("  -shared-policy-md string")
 		fmt.Println("        Custom path for shared POLICY.md (e.g., ~/docs/conductor-policy.md)")
 		fmt.Println()
@@ -213,8 +229,12 @@ func handleConductorSetup(profile string, args []string) {
 	if resolvedSharedInstructionsMD == "" {
 		resolvedSharedInstructionsMD = *sharedClaudeMD
 	}
-	if spec.Agent != session.ConductorAgentClaude && (*claudeMD != "" || *sharedClaudeMD != "") {
-		fmt.Fprintln(os.Stderr, "Error: -claude-md and -shared-claude-md are only valid with --agent=claude")
+	if spec.InstructionsFileName != "CLAUDE.md" && (*claudeMD != "" || *sharedClaudeMD != "") {
+		fmt.Fprintln(os.Stderr, "Error: -claude-md and -shared-claude-md are only valid with agents that use CLAUDE.md")
+		os.Exit(1)
+	}
+	if spec.Agent != session.ConductorAgentCopilot && (*model != "" || *allowAll) {
+		fmt.Fprintln(os.Stderr, "Error: -model and -allow-all are only valid with --agent=copilot")
 		os.Exit(1)
 	}
 	resolvedProfile := session.GetEffectiveProfile(profile)
@@ -241,6 +261,26 @@ func handleConductorSetup(profile string, args []string) {
 	telegramConfigured := settings.Telegram.Token != ""
 	slackConfigured := settings.Slack.BotToken != ""
 	discordConfigured := settings.Discord.BotToken != ""
+
+	resolvedCopilotModel := strings.TrimSpace(*model)
+	if spec.Agent == session.ConductorAgentCopilot && resolvedCopilotModel == "" {
+		if strings.TrimSpace(config.Copilot.ConductorModel) != "" {
+			resolvedCopilotModel = strings.TrimSpace(config.Copilot.ConductorModel)
+		} else {
+			resolvedCopilotModel = strings.TrimSpace(config.Copilot.DefaultModel)
+		}
+	}
+	var resolvedCopilotAllowAll bool
+	if spec.Agent == session.ConductorAgentCopilot {
+		switch {
+		case flagWasProvided(fs, "allow-all"):
+			resolvedCopilotAllowAll = *allowAll
+		case config.Copilot.ConductorAllowAll != nil:
+			resolvedCopilotAllowAll = *config.Copilot.ConductorAllowAll
+		default:
+			resolvedCopilotAllowAll = config.Copilot.AllowAll
+		}
+	}
 
 	// v1.7.22: warn on the "global telegram enabled in profile settings.json"
 	// anti-pattern that silently leaks pollers to every claude session under
@@ -469,6 +509,22 @@ func handleConductorSetup(profile string, args []string) {
 		fmt.Fprintf(os.Stderr, "Error setting up conductor %s: %v\n", name, err)
 		os.Exit(1)
 	}
+	if meta, err := session.LoadConductorMeta(name); err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading conductor metadata for %s: %v\n", name, err)
+		os.Exit(1)
+	} else {
+		if spec.Agent == session.ConductorAgentCopilot {
+			meta.Model = resolvedCopilotModel
+			meta.AllowAll = &resolvedCopilotAllowAll
+		} else {
+			meta.Model = ""
+			meta.AllowAll = nil
+		}
+		if err := session.SaveConductorMeta(meta); err != nil {
+			fmt.Fprintf(os.Stderr, "Error updating conductor metadata for %s: %v\n", name, err)
+			os.Exit(1)
+		}
+	}
 	if !*jsonOutput {
 		fmt.Printf("  [ok] Directory, %s, and meta.json created\n", spec.InstructionsFileName)
 	}
@@ -507,6 +563,14 @@ func handleConductorSetup(profile string, args []string) {
 			}
 			inst.Tool = spec.Agent
 			inst.Command = spec.DefaultCommand
+			inst.IsConductor = true
+			if spec.Agent == session.ConductorAgentCopilot {
+				inst.CopilotModel = resolvedCopilotModel
+				inst.CopilotAllowAll = resolvedCopilotAllowAll
+			} else {
+				inst.CopilotModel = ""
+				inst.CopilotAllowAll = false
+			}
 			break
 		}
 		if !*jsonOutput {
@@ -517,6 +581,10 @@ func handleConductorSetup(profile string, args []string) {
 		newInst := session.NewInstanceWithGroupAndTool(sessionTitle, dir, "conductor", spec.Agent)
 		newInst.Command = spec.DefaultCommand
 		newInst.IsConductor = true
+		if spec.Agent == session.ConductorAgentCopilot {
+			newInst.CopilotModel = resolvedCopilotModel
+			newInst.CopilotAllowAll = resolvedCopilotAllowAll
+		}
 		instances = append(instances, newInst)
 
 		sessionID = newInst.ID
@@ -602,6 +670,8 @@ func handleConductorSetup(profile string, args []string) {
 		data := map[string]any{
 			"success":                 true,
 			"agent":                   spec.Agent,
+			"model":                   resolvedCopilotModel,
+			"allow_all":               resolvedCopilotAllowAll,
 			"name":                    name,
 			"profile":                 resolvedProfile,
 			"session":                 sessionID,
@@ -628,6 +698,12 @@ func handleConductorSetup(profile string, args []string) {
 	fmt.Println()
 	fmt.Printf("  Name:      %s\n", name)
 	fmt.Printf("  Agent:     %s\n", spec.Agent)
+	if spec.Agent == session.ConductorAgentCopilot && resolvedCopilotModel != "" {
+		fmt.Printf("  Model:     %s\n", resolvedCopilotModel)
+	}
+	if spec.Agent == session.ConductorAgentCopilot {
+		fmt.Printf("  AllowAll:  %v\n", resolvedCopilotAllowAll)
+	}
 	fmt.Printf("  Profile:   %s\n", resolvedProfile)
 	fmt.Printf("  Heartbeat: %v\n", heartbeatEnabled)
 	if *description != "" {
@@ -923,6 +999,7 @@ func handleConductorStatus(_ string, args []string) {
 	type conductorStatus struct {
 		Name        string `json:"name"`
 		Agent       string `json:"agent"`
+		Model       string `json:"model,omitempty"`
 		Profile     string `json:"profile"`
 		DirExists   bool   `json:"dir_exists"`
 		SessionID   string `json:"session_id,omitempty"`
@@ -937,6 +1014,7 @@ func handleConductorStatus(_ string, args []string) {
 		cs := conductorStatus{
 			Name:        meta.Name,
 			Agent:       meta.GetAgent(),
+			Model:       meta.Model,
 			Profile:     meta.Profile,
 			DirExists:   session.IsConductorSetup(meta.Name),
 			Heartbeat:   meta.HeartbeatEnabled,
@@ -1032,7 +1110,11 @@ func handleConductorStatus(_ string, args []string) {
 			desc = fmt.Sprintf("  %q", cs.Description)
 		}
 
-		fmt.Printf("  %s %s [%s] agent:%s heartbeat:%s  (%s)%s\n", statusIcon, cs.Name, cs.Profile, cs.Agent, hb, statusText, desc)
+		model := ""
+		if cs.Model != "" {
+			model = fmt.Sprintf(" model:%s", cs.Model)
+		}
+		fmt.Printf("  %s %s [%s] agent:%s%s heartbeat:%s  (%s)%s\n", statusIcon, cs.Name, cs.Profile, cs.Agent, model, hb, statusText, desc)
 	}
 	fmt.Println()
 
@@ -1139,7 +1221,11 @@ func handleConductorList(profile string, args []string) {
 			desc = fmt.Sprintf("  %q", meta.Description)
 		}
 
-		fmt.Printf("  %-12s [%s]  agent:%-6s heartbeat:%-3s  %-10s%s\n", meta.Name, meta.Profile, meta.GetAgent(), hb, statusText, desc)
+		model := ""
+		if meta.Model != "" {
+			model = fmt.Sprintf(" model:%s", meta.Model)
+		}
+		fmt.Printf("  %-12s [%s]  agent:%-8s%s heartbeat:%-3s  %-10s%s\n", meta.Name, meta.Profile, meta.GetAgent(), model, hb, statusText, desc)
 	}
 	fmt.Println()
 }

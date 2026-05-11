@@ -834,6 +834,14 @@ type CopilotSettings struct {
 	// --allow-all-tools --allow-all-paths --allow-all-urls). Can be overridden
 	// per-session.
 	AllowAll bool `toml:"allow_all"`
+
+	// ConductorModel sets the default Copilot model for conductor sessions only.
+	// Falls back to DefaultModel when empty.
+	ConductorModel string `toml:"conductor_model"`
+
+	// ConductorAllowAll overrides allow_all for conductor sessions only.
+	// Nil means "fall back to allow_all".
+	ConductorAllowAll *bool `toml:"conductor_allow_all"`
 }
 
 // WorktreeSettings contains git worktree preferences.

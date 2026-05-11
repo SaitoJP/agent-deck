@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	ConductorAgentClaude = "claude"
-	ConductorAgentCodex  = "codex"
+	ConductorAgentClaude  = "claude"
+	ConductorAgentCodex   = "codex"
+	ConductorAgentCopilot = "copilot"
 )
 
 // ConductorAgentSpec describes conductor-specific behavior for an agent runtime.
@@ -41,6 +42,13 @@ var conductorAgentSpecs = map[string]ConductorAgentSpec{
 		DisplayName:            "Codex",
 		DefaultCommand:         "codex",
 		InstructionsFileName:   "AGENTS.md",
+		SupportsClearOnCompact: false,
+	},
+	ConductorAgentCopilot: {
+		Agent:                  ConductorAgentCopilot,
+		DisplayName:            "GitHub Copilot CLI",
+		DefaultCommand:         "copilot",
+		InstructionsFileName:   "CLAUDE.md",
 		SupportsClearOnCompact: false,
 	},
 }
@@ -129,6 +137,7 @@ type ConductorMeta struct {
 	HeartbeatEnabled  bool   `json:"heartbeat_enabled"`
 	HeartbeatInterval int    `json:"heartbeat_interval"` // 0 = use global default
 	Description       string `json:"description,omitempty"`
+	Model             string `json:"model,omitempty"`
 	CreatedAt         string `json:"created_at"`
 
 	// ClearOnCompact blocks Claude's auto-compaction and sends /clear instead.
@@ -145,6 +154,10 @@ type ConductorMeta struct {
 	// EnvFile is a path to a .env file to source before the conductor command.
 	// Supports ~ and $VAR expansion.
 	EnvFile string `json:"env_file,omitempty"`
+
+	// AllowAll enables tool/path/url auto-approval for Copilot conductors.
+	// Nil means "use config defaults / runtime defaults".
+	AllowAll *bool `json:"allow_all,omitempty"`
 }
 
 // GetAgent returns the normalized conductor agent, defaulting to Claude.
@@ -204,7 +217,7 @@ func GetConductorAgentSpec(agent string) (ConductorAgentSpec, error) {
 	normalized := normalizeConductorAgent(agent)
 	spec, ok := conductorAgentSpecs[normalized]
 	if !ok {
-		return ConductorAgentSpec{}, fmt.Errorf("unsupported conductor agent %q (supported: %s, %s)", agent, ConductorAgentClaude, ConductorAgentCodex)
+		return ConductorAgentSpec{}, fmt.Errorf("unsupported conductor agent %q (supported: %s, %s, %s)", agent, ConductorAgentClaude, ConductorAgentCodex, ConductorAgentCopilot)
 	}
 	return spec, nil
 }
@@ -506,6 +519,9 @@ func SetupConductorWithAgent(name, profile, agent string, heartbeatEnabled bool,
 	}
 	for otherAgent, otherSpec := range conductorAgentSpecs {
 		if otherAgent == spec.Agent {
+			continue
+		}
+		if otherSpec.InstructionsFileName == spec.InstructionsFileName {
 			continue
 		}
 		stalePath := filepath.Join(dir, otherSpec.InstructionsFileName)
@@ -901,7 +917,15 @@ func InstallSharedConductorInstructions(agent, customPath string) error {
 	if info, err := os.Lstat(targetPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		return nil
 	}
-	content := renderConductorInstructionsTemplate(conductorSharedClaudeMDTemplate, "", DefaultProfile, spec)
+	renderSpec := spec
+	if spec.InstructionsFileName == "CLAUDE.md" {
+		renderSpec = ConductorAgentSpec{
+			Agent:                "<tool>",
+			DisplayName:          "agent",
+			InstructionsFileName: "CLAUDE.md",
+		}
+	}
+	content := renderConductorInstructionsTemplate(conductorSharedClaudeMDTemplate, "", DefaultProfile, renderSpec)
 	if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("failed to write shared %s: %w", spec.InstructionsFileName, err)
 	}

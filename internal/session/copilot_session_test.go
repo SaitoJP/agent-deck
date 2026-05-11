@@ -293,6 +293,23 @@ func TestBuildCopilotCommand_Fresh(t *testing.T) {
 	}
 }
 
+func TestBuildCopilotCommand_FreshConductorIncludesStartupPrompt(t *testing.T) {
+	inst := &Instance{
+		Tool:        "copilot",
+		Command:     "copilot",
+		IsConductor: true,
+		Title:       "conductor-ops",
+	}
+
+	cmd := buildCopilotCommand(inst)
+	if !strings.Contains(cmd, " -i ") {
+		t.Fatalf("expected fresh conductor command to include -i prompt, got %q", cmd)
+	}
+	if !strings.Contains(cmd, "CLAUDE.md") {
+		t.Fatalf("expected fresh conductor command to mention CLAUDE.md, got %q", cmd)
+	}
+}
+
 func TestBuildCopilotCommand_WithModel(t *testing.T) {
 	inst := &Instance{
 		Tool:         "copilot",
@@ -338,11 +355,11 @@ func TestBuildCopilotCommand_Resume(t *testing.T) {
 	}
 
 	inst := &Instance{
-		Tool:              "copilot",
-		Command:           "copilot",
-		CopilotSessionID:  sessionID,
-		CopilotModel:      "gpt-5",
-		CopilotAllowAll:   true,
+		Tool:             "copilot",
+		Command:          "copilot",
+		CopilotSessionID: sessionID,
+		CopilotModel:     "gpt-5",
+		CopilotAllowAll:  true,
 	}
 
 	cmd := buildCopilotCommand(inst)

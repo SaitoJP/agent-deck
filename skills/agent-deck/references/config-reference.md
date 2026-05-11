@@ -8,6 +8,7 @@ All options for `~/.agent-deck/config.toml`.
 - [[shell] Section](#shell-section)
 - [[claude] Section](#claude-section)
 - [[codex] Section](#codex-section)
+- [[copilot] Section](#copilot-section)
 - [[docker] Section](#docker-section)
 - [[logs] Section](#logs-section)
 - [[updates] Section](#updates-section)
@@ -131,6 +132,27 @@ yolo_mode = true   # Enable --yolo (bypass approvals and sandbox)
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `yolo_mode` | bool | `false` | Maps to `codex --yolo` (`--dangerously-bypass-approvals-and-sandbox`). Can be overridden per-session. |
+
+## [copilot] Section
+
+GitHub Copilot CLI integration settings.
+
+```toml
+[copilot]
+env_file = "~/.copilot.env"                  # .env file specific to Copilot sessions
+default_model = "claude-sonnet-4.6"         # Default model for new Copilot sessions
+allow_all = true                             # Enable --allow-all by default
+conductor_model = "claude-sonnet-4.6"       # Optional override for Copilot conductors
+conductor_allow_all = true                   # Optional override for Copilot conductors
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `env_file` | string | `""` | A .env file sourced for Copilot sessions only. Sourced after global `[shell].env_files`. |
+| `default_model` | string | `""` | Default Copilot model for new sessions. Passed as `copilot --model <value>`. Can be overridden per session. |
+| `allow_all` | bool | `false` | Enables `copilot --allow-all` by default for new sessions. |
+| `conductor_model` | string | `""` | Default Copilot model for `conductor setup --agent copilot` when `--model` is not provided. Falls back to `default_model` when empty. |
+| `conductor_allow_all` | bool | unset | Default `--allow-all` behavior for `conductor setup --agent copilot`. Falls back to `allow_all` when unset. |
 
 ## [docker] Section
 
