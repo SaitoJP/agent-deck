@@ -548,46 +548,44 @@ func discoverLatestClaudeJSONL(projectPath string) (string, bool) {
 		configDir = filepath.Join(os.Getenv("HOME"), ".claude")
 	}
 
-	resolvedPath := projectPath
-	if resolved, err := filepath.EvalSymlinks(projectPath); err == nil {
-		resolvedPath = resolved
-	}
-
-	encoded := ConvertToClaudeDirName(resolvedPath)
-	if encoded == "" {
-		encoded = "-"
-	}
-
-	projectDir := filepath.Join(configDir, "projects", encoded)
-	if _, err := os.Stat(projectDir); os.IsNotExist(err) {
-		return "", false
-	}
-
-	entries, err := os.ReadDir(projectDir)
-	if err != nil || len(entries) == 0 {
-		return "", false
+	lookupPaths := []string{projectPath}
+	if resolved, err := filepath.EvalSymlinks(projectPath); err == nil && resolved != "" && resolved != projectPath {
+		lookupPaths = append(lookupPaths, resolved)
 	}
 
 	var bestUUID string
 	var bestMTime time.Time
-	for _, e := range entries {
-		if e.IsDir() {
+	for _, lookupPath := range lookupPaths {
+		encoded := ConvertToClaudeDirName(lookupPath)
+		if encoded == "" {
+			encoded = "-"
+		}
+
+		projectDir := filepath.Join(configDir, "projects", encoded)
+		entries, err := os.ReadDir(projectDir)
+		if err != nil || len(entries) == 0 {
 			continue
 		}
-		base := e.Name()
-		if strings.HasPrefix(base, "agent-") {
-			continue
-		}
-		if !uuidSessionFileRegex.MatchString(base) {
-			continue
-		}
-		info, ierr := e.Info()
-		if ierr != nil {
-			continue
-		}
-		if info.ModTime().After(bestMTime) {
-			bestMTime = info.ModTime()
-			bestUUID = strings.TrimSuffix(base, ".jsonl")
+
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			base := e.Name()
+			if strings.HasPrefix(base, "agent-") {
+				continue
+			}
+			if !uuidSessionFileRegex.MatchString(base) {
+				continue
+			}
+			info, ierr := e.Info()
+			if ierr != nil {
+				continue
+			}
+			if info.ModTime().After(bestMTime) {
+				bestMTime = info.ModTime()
+				bestUUID = strings.TrimSuffix(base, ".jsonl")
+			}
 		}
 	}
 

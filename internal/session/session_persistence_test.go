@@ -1562,6 +1562,38 @@ func TestPersistence_DiscoverLatestClaudeJSONL_Unit(t *testing.T) {
 			t.Fatalf("no_recency_cap: got %q, want ffffffff-...", got)
 		}
 	})
+
+	t.Run("symlink_path_checks_unresolved_dir_too", func(t *testing.T) {
+		home := isolatedHomeDir(t)
+		t.Setenv("CLAUDE_CONFIG_DIR", "")
+
+		target := filepath.Join(home, "target-project")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatalf("mkdir target: %v", err)
+		}
+		link := filepath.Join(home, "linked-project")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatalf("symlink %s -> %s: %v", link, target, err)
+		}
+
+		dir := filepath.Join(home, ".claude", "projects", ConvertToClaudeDirName(link))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+		const sessionID = "99999999-9999-9999-9999-999999999999"
+		p := filepath.Join(dir, sessionID+".jsonl")
+		if err := os.WriteFile(p, []byte(`{"sessionId":"`+sessionID+`"}`+"\n"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+
+		got, found := discoverLatestClaudeJSONL(link)
+		if !found {
+			t.Fatalf("symlink_path_checks_unresolved_dir_too: found=false, want true")
+		}
+		if got != sessionID {
+			t.Fatalf("symlink_path_checks_unresolved_dir_too: got %q, want %q", got, sessionID)
+		}
+	})
 }
 
 // TestEnsureClaudeSessionIDFromDisk_NewSessionSkipsDiscovery verifies that a
