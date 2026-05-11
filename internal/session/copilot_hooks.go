@@ -308,3 +308,17 @@ func (i *Instance) GetCopilotOptions() *CopilotOptions {
 	}
 	return opts
 }
+
+// SetCopilotOptions stores Copilot-specific options.
+func (i *Instance) SetCopilotOptions(opts *CopilotOptions) error {
+	if opts == nil {
+		i.ToolOptionsJSON = nil
+		return nil
+	}
+	data, err := MarshalToolOptions(opts)
+	if err != nil {
+		return err
+	}
+	i.ToolOptionsJSON = data
+	return nil
+}

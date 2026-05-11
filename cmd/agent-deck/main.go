@@ -1087,6 +1087,7 @@ func handleAdd(profile string, args []string) {
 
 	// Resume session flag
 	resumeSession := fs.String("resume-session", "", "Claude session ID to resume (skips new session creation)")
+	copilotModel := fs.String("model", "", "Copilot-only: model for this session (e.g. claude-sonnet-4.6)")
 	yoloMode := fs.Bool("yolo", false, "Enable YOLO mode for Gemini or Codex sessions")
 	geminiYoloMode := fs.Bool("gemini-yolo", false, "Enable YOLO mode (alias for --yolo)")
 
@@ -1119,6 +1120,7 @@ func handleAdd(profile string, args []string) {
 		fmt.Println("  agent-deck add -c opencode --wrapper \"nvim +'terminal {command}' +'startinsert'\" .")
 		fmt.Println("  agent-deck add -c \"codex --dangerously-bypass-approvals-and-sandbox\" .")
 		fmt.Println("  agent-deck add -c gemini --yolo .")
+		fmt.Println("  agent-deck add -c copilot --model claude-sonnet-4.6 .")
 		fmt.Println("  agent-deck add -c claude -g work .   # -c is shorthand for --cmd")
 		fmt.Println("  agent-deck add -g ard --no-parent -c claude .")
 		fmt.Println("  agent-deck add --quick -c claude .   # Auto-generated name")
@@ -1430,6 +1432,10 @@ func handleAdd(profile string, args []string) {
 			os.Exit(1)
 		}
 		newInstance.ExtraArgs = extraArgFlags
+	}
+	if err := applyCLICopilotModelOverride(newInstance, *copilotModel); err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
 	}
 
 	// Set wrapper if provided

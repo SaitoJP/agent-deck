@@ -73,6 +73,7 @@ func handleLaunch(profile string, args []string) {
 
 	// Resume session flag
 	resumeSession := fs.String("resume-session", "", "Claude session ID to resume")
+	copilotModel := fs.String("model", "", "Copilot-only: model for this session (e.g. claude-sonnet-4.6)")
 
 	// Socket isolation (v1.7.50+, issue #687). Same semantics as
 	// `agent-deck add --tmux-socket`: overrides `[tmux].socket_name` for
@@ -99,6 +100,7 @@ func handleLaunch(profile string, args []string) {
 		fmt.Println("  agent-deck launch . -c claude --channel plugin:telegram@user/repo -m \"Listen for messages\"")
 		fmt.Println("  agent-deck launch . -c claude -m \"Fix bug\" --no-wait")
 		fmt.Println("  agent-deck launch . -c \"codex --dangerously-bypass-approvals-and-sandbox\"")
+		fmt.Println("  agent-deck launch . -c copilot --model claude-sonnet-4.6")
 		fmt.Println("  agent-deck launch . -g ard --no-parent -c claude -m \"Run review\"")
 	}
 
@@ -342,6 +344,10 @@ func handleLaunch(profile string, args []string) {
 			os.Exit(1)
 		}
 		newInstance.ExtraArgs = extraArgFlags
+	}
+	if err := applyCLICopilotModelOverride(newInstance, *copilotModel); err != nil {
+		out.Error(err.Error(), ErrCodeInvalidOperation)
+		os.Exit(1)
 	}
 
 	if sessionWrapperResolved != "" {

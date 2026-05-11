@@ -722,6 +722,7 @@ See [Troubleshooting](skills/agent-deck/references/troubleshooting.md#uninstalli
 ```bash
 agent-deck                        # Launch TUI
 agent-deck add . -c claude        # Add current dir with Claude
+agent-deck add . -c copilot --model claude-sonnet-4.6  # Add current dir with Copilot on a specific model
 agent-deck session fork my-proj   # Fork a Claude session
 agent-deck session remove my-proj # Remove stopped/errored session from registry (transcripts preserved)
 agent-deck mcp attach my-proj exa # Attach MCP to session

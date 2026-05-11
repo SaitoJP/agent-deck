@@ -49,6 +49,42 @@ func TestApplyCLIYoloOverride(t *testing.T) {
 	})
 }
 
+func TestApplyCLICopilotModelOverride(t *testing.T) {
+	t.Run("copilot sets instance model and tool options", func(t *testing.T) {
+		inst := session.NewInstanceWithTool("copilot-test", "/tmp/test", "copilot")
+		if err := applyCLICopilotModelOverride(inst, "claude-sonnet-4.6"); err != nil {
+			t.Fatalf("applyCLICopilotModelOverride() error = %v", err)
+		}
+		if inst.CopilotModel != "claude-sonnet-4.6" {
+			t.Fatalf("CopilotModel = %q, want %q", inst.CopilotModel, "claude-sonnet-4.6")
+		}
+		opts := inst.GetCopilotOptions()
+		if opts == nil || opts.Model != "claude-sonnet-4.6" {
+			t.Fatalf("CopilotOptions = %+v, want model claude-sonnet-4.6", opts)
+		}
+	})
+
+	t.Run("empty model is no-op", func(t *testing.T) {
+		inst := session.NewInstanceWithTool("copilot-test", "/tmp/test", "copilot")
+		if err := applyCLICopilotModelOverride(inst, ""); err != nil {
+			t.Fatalf("applyCLICopilotModelOverride() error = %v", err)
+		}
+		if inst.CopilotModel != "" {
+			t.Fatalf("CopilotModel = %q, want empty", inst.CopilotModel)
+		}
+		if opts := inst.GetCopilotOptions(); opts != nil {
+			t.Fatalf("CopilotOptions = %+v, want nil when flag is not set", opts)
+		}
+	})
+
+	t.Run("non-copilot returns error", func(t *testing.T) {
+		inst := session.NewInstanceWithTool("claude-test", "/tmp/test", "claude")
+		if err := applyCLICopilotModelOverride(inst, "claude-sonnet-4.6"); err == nil {
+			t.Fatal("applyCLICopilotModelOverride() error = nil, want non-nil")
+		}
+	})
+}
+
 // TestMain is in testmain_test.go - sets AGENTDECK_PROFILE=_test
 
 // =============================================================================
