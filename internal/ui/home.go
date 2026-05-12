@@ -7994,12 +7994,12 @@ func (h *Home) createSessionInGroupWithWorktreeAndOptions(
 			inst.WorktreeBranch = worktreeBranch
 		}
 
-		applyCreateSessionToolOverrides(inst, tool, geminiYoloMode)
-
 		// Apply generic tool options (claude, codex, etc.)
 		if len(toolOptionsJSON) > 0 {
 			inst.ToolOptionsJSON = toolOptionsJSON
 		}
+
+		applyCreateSessionToolOverrides(inst, tool, geminiYoloMode)
 
 		// Apply claude extra CLI tokens (claude-only, ignored for other tools).
 		if tool == "claude" && len(claudeExtraArgs) > 0 {

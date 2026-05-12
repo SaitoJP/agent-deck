@@ -84,18 +84,20 @@ func TestApplyCreateSessionToolOverrides_NonGeminiNoop(t *testing.T) {
 
 func TestApplyCreateSessionToolOverrides_CopilotModelAndAllowAll(t *testing.T) {
 	inst := session.NewInstanceWithTool("copilot-test", "/tmp/test", "copilot")
-	if err := inst.SetCopilotOptions(&session.CopilotOptions{
+	raw, err := session.MarshalToolOptions(&session.CopilotOptions{
 		SessionMode: "new",
-		Model:       "claude-sonnet-4.6",
+		Model:       "gpt-5.4",
 		AllowAll:    true,
-	}); err != nil {
-		t.Fatalf("SetCopilotOptions() error = %v", err)
+	})
+	if err != nil {
+		t.Fatalf("MarshalToolOptions() error = %v", err)
 	}
+	inst.ToolOptionsJSON = raw
 
 	applyCreateSessionToolOverrides(inst, "copilot", false)
 
-	if inst.CopilotModel != "claude-sonnet-4.6" {
-		t.Fatalf("CopilotModel = %q, want %q", inst.CopilotModel, "claude-sonnet-4.6")
+	if inst.CopilotModel != "gpt-5.4" {
+		t.Fatalf("CopilotModel = %q, want %q", inst.CopilotModel, "gpt-5.4")
 	}
 	if !inst.CopilotAllowAll {
 		t.Fatal("CopilotAllowAll = false, want true")
