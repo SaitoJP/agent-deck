@@ -22,6 +22,7 @@ const (
 	FieldExtraArgs          = "extra-args"
 	FieldColor              = "color"
 	FieldNotes              = "notes"
+	FieldRoleInstructions   = "role-instructions"
 	FieldClaudeSessionID    = "claude-session-id"
 	FieldGeminiSessionID    = "gemini-session-id"
 	FieldTitleLocked        = "title-locked"
@@ -40,6 +41,7 @@ var ValidMutableFields = []string{
 	FieldExtraArgs,
 	FieldColor,
 	FieldNotes,
+	FieldRoleInstructions,
 	FieldClaudeSessionID,
 	FieldGeminiSessionID,
 	FieldTitleLocked,
@@ -120,6 +122,10 @@ func SetField(inst *Instance, field, value string, extraArgsTokens []string) (ol
 	case FieldNotes:
 		oldValue = inst.Notes
 		inst.Notes = value
+
+	case FieldRoleInstructions:
+		oldValue = inst.RoleInstructions
+		inst.RoleInstructions = value
 
 	case FieldColor:
 		oldValue = inst.Color

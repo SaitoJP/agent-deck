@@ -81,8 +81,9 @@ type InstanceData struct {
 	CodexDetectedAt time.Time `json:"codex_detected_at,omitempty"`
 
 	// Latest user input for context
-	LatestPrompt string `json:"latest_prompt,omitempty"`
-	Notes        string `json:"notes,omitempty"`
+	LatestPrompt     string `json:"latest_prompt,omitempty"`
+	Notes            string `json:"notes,omitempty"`
+	RoleInstructions string `json:"role_instructions,omitempty"`
 
 	// Tool-specific launch options (generic for all tools: claude, codex, etc.)
 	ToolOptionsJSON json.RawMessage `json:"tool_options,omitempty"`
@@ -324,7 +325,7 @@ func (s *Storage) SaveWithGroups(instances []*Instance, groupTree *GroupTree) er
 			inst.GeminiYoloMode, inst.GeminiModel,
 			inst.OpenCodeSessionID, inst.OpenCodeDetectedAt,
 			inst.CodexSessionID, inst.CodexDetectedAt,
-			inst.LatestPrompt, inst.Notes, inst.LoadedMCPNames,
+			inst.LatestPrompt, inst.Notes, inst.RoleInstructions, inst.LoadedMCPNames,
 			inst.ToolOptionsJSON,
 			sandboxJSON, inst.SandboxContainer,
 			inst.SSHHost, inst.SSHRemotePath,
@@ -475,7 +476,7 @@ func (s *Storage) LoadLite() ([]*InstanceData, []*GroupData, error) {
 			geminiYolo, geminiModel,
 			opencodeSID, opencodeAt,
 			codexSID, codexAt,
-			latestPrompt, notes, loadedMCPs,
+			latestPrompt, notes, roleInstructions, loadedMCPs,
 			toolOpts,
 			sandboxJSON, sandboxContainer,
 			sshHost2, sshRemotePath2,
@@ -519,6 +520,7 @@ func (s *Storage) LoadLite() ([]*InstanceData, []*GroupData, error) {
 			CodexDetectedAt:    codexAt,
 			LatestPrompt:       latestPrompt,
 			Notes:              notes,
+			RoleInstructions:   roleInstructions,
 			ToolOptionsJSON:    toolOpts,
 			LoadedMCPNames:     loadedMCPs,
 			Sandbox:            sandboxCfg,
@@ -581,7 +583,7 @@ func (s *Storage) LoadWithGroups() ([]*Instance, []*GroupData, error) {
 			geminiYolo, geminiModel,
 			opencodeSID, opencodeAt,
 			codexSID, codexAt,
-			latestPrompt, notes, loadedMCPs,
+			latestPrompt, notes, roleInstructions, loadedMCPs,
 			toolOpts,
 			sandboxJSON, sandboxContainer,
 			sshHost, sshRemotePath,
@@ -625,6 +627,7 @@ func (s *Storage) LoadWithGroups() ([]*Instance, []*GroupData, error) {
 			CodexDetectedAt:    codexAt,
 			LatestPrompt:       latestPrompt,
 			Notes:              notes,
+			RoleInstructions:   roleInstructions,
 			ToolOptionsJSON:    toolOpts,
 			LoadedMCPNames:     loadedMCPs,
 			Sandbox:            sandboxCfg,
@@ -870,6 +873,7 @@ func (s *Storage) convertToInstances(data *StorageData) ([]*Instance, []*GroupDa
 			ToolOptionsJSON:    instData.ToolOptionsJSON,
 			LatestPrompt:       instData.LatestPrompt,
 			Notes:              instData.Notes,
+			RoleInstructions:   instData.RoleInstructions,
 			LoadedMCPNames:     instData.LoadedMCPNames,
 			Channels:           instData.Channels,
 			ExtraArgs:          instData.ExtraArgs,

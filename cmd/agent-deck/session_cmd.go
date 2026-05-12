@@ -203,17 +203,11 @@ func handleSessionStart(profile string, args []string) {
 		os.Exit(1)
 	}
 
-	// Start the session (with or without initial message)
-	if initialMessage != "" {
-		if err := inst.StartWithMessage(initialMessage); err != nil {
-			out.Error(fmt.Sprintf("failed to start session: %v", err), ErrCodeInvalidOperation)
-			os.Exit(1)
-		}
-	} else {
-		if err := inst.Start(); err != nil {
-			out.Error(fmt.Sprintf("failed to start session: %v", err), ErrCodeInvalidOperation)
-			os.Exit(1)
-		}
+	// Start the session, combining any persistent role instructions with an
+	// optional one-shot initial message for fresh starts.
+	if err := inst.StartWithStartupMessage(initialMessage); err != nil {
+		out.Error(fmt.Sprintf("failed to start session: %v", err), ErrCodeInvalidOperation)
+		os.Exit(1)
 	}
 
 	// Capture session ID from tmux env before saving to JSON

@@ -26,7 +26,7 @@ func (m *WebMutator) CreateSession(title, tool, projectPath, groupPath string) (
 		inst = session.NewInstanceWithTool(title, projectPath, tool)
 	}
 
-	if err := inst.Start(); err != nil {
+	if err := inst.StartWithStartupMessage(""); err != nil {
 		return "", fmt.Errorf("start session: %w", err)
 	}
 
@@ -56,7 +56,7 @@ func (m *WebMutator) StartSession(id string) error {
 	if inst == nil {
 		return fmt.Errorf("session not found: %s", id)
 	}
-	return inst.Start()
+	return inst.StartWithStartupMessage("")
 }
 
 // StopSession kills (stops) a running session by ID.
@@ -120,7 +120,7 @@ func (m *WebMutator) ForkSession(id string) (string, error) {
 		return "", fmt.Errorf("fork session: %w", err)
 	}
 
-	if err := forked.Start(); err != nil {
+	if err := forked.StartWithStartupMessage(""); err != nil {
 		return "", fmt.Errorf("start forked session: %w", err)
 	}
 

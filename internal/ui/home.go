@@ -206,6 +206,7 @@ type Home struct {
 	mcpDialog            *MCPDialog            // For managing MCPs
 	editPathsDialog      *EditPathsDialog      // For editing multi-repo paths
 	editSessionDialog    *EditSessionDialog    // For editing session settings (title/color/notes/command/...)
+	roleEditorDialog     *RoleEditorDialog     // For editing persistent per-session role instructions
 	skillDialog          *SkillDialog          // For managing project skills
 	setupWizard          *SetupWizard          // For first-run setup
 	settingsPanel        *SettingsPanel        // For editing settings
@@ -748,6 +749,7 @@ func NewHomeWithProfileAndMode(profile string) *Home {
 		mcpDialog:            NewMCPDialog(),
 		editPathsDialog:      NewEditPathsDialog(),
 		editSessionDialog:    NewEditSessionDialog(),
+		roleEditorDialog:     NewRoleEditorDialog(),
 		skillDialog:          NewSkillDialog(),
 		setupWizard:          NewSetupWizard(),
 		settingsPanel:        NewSettingsPanel(),
@@ -4878,6 +4880,9 @@ func (h *Home) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if h.editPathsDialog.IsVisible() {
 			return h.handleEditPathsDialogKey(msg)
 		}
+		if h.roleEditorDialog.IsVisible() {
+			return h.handleRoleEditorDialogKey(msg)
+		}
 		if h.editSessionDialog.IsVisible() {
 			return h.handleEditSessionDialogKey(msg)
 		}
@@ -5077,7 +5082,7 @@ func (h *Home) createSessionFromGlobalSearch(result *GlobalSearchResult) tea.Cmd
 		_ = inst.SetClaudeOptions(opts)
 
 		// Start the session
-		if err := inst.Start(); err != nil {
+		if err := inst.StartWithStartupMessage(""); err != nil {
 			return sessionCreatedMsg{err: fmt.Errorf("failed to start session: %w", err)}
 		}
 
@@ -5386,6 +5391,43 @@ func (h *Home) handleNotesEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return h, cmd
 }
 
+func (h *Home) beginRoleEditing(inst *session.Instance) {
+	if inst == nil {
+		return
+	}
+	h.roleEditorDialog.SetSize(h.width, h.height)
+	h.roleEditorDialog.Show(inst)
+}
+
+func (h *Home) handleRoleEditorDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		h.roleEditorDialog.Hide()
+		return h, nil
+	case "ctrl+s":
+		sessionID := h.roleEditorDialog.SessionID()
+		inst := h.getInstanceByID(sessionID)
+		if inst == nil {
+			h.roleEditorDialog.Hide()
+			return h, nil
+		}
+		h.instancesMu.Lock()
+		_, _, err := session.SetField(inst, session.FieldRoleInstructions, h.roleEditorDialog.Value(), nil)
+		h.instancesMu.Unlock()
+		if err != nil {
+			h.setError(err)
+			return h, nil
+		}
+		h.forceSaveInstances()
+		h.roleEditorDialog.Hide()
+		return h, nil
+	default:
+		var cmd tea.Cmd
+		h.roleEditorDialog, cmd = h.roleEditorDialog.Update(msg)
+		return h, cmd
+	}
+}
+
 // overlayJumpHint places a badge-style hint label at the item name position.
 func (h *Home) overlayJumpHint(line string, hint string, buffer string, itemName string) string {
 	if hint == "" {
@@ -5488,7 +5530,7 @@ func (h *Home) hasModalVisible() bool {
 		h.confirmDialog.IsVisible() || h.mcpDialog.IsVisible() || h.skillDialog.IsVisible() ||
 		h.geminiModelDialog.IsVisible() || h.sessionPickerDialog.IsVisible() ||
 		h.worktreeFinishDialog.IsVisible() || h.editPathsDialog.IsVisible() ||
-		h.editSessionDialog.IsVisible() ||
+		h.editSessionDialog.IsVisible() || h.roleEditorDialog.IsVisible() ||
 		h.zoxidePicker.IsVisible()
 }
 
@@ -6659,6 +6701,15 @@ func (h *Home) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			item := h.flatItems[h.cursor]
 			if item.Type == session.ItemTypeSession && item.Session != nil {
 				h.beginNotesEditing(item.Session)
+			}
+		}
+		return h, nil
+
+	case "I":
+		if h.cursor < len(h.flatItems) {
+			item := h.flatItems[h.cursor]
+			if item.Type == session.ItemTypeSession && item.Session != nil {
+				h.beginRoleEditing(item.Session)
 			}
 		}
 		return h, nil
@@ -8140,7 +8191,7 @@ func (h *Home) createSessionInGroupWithWorktreeAndOptions(
 			slog.String("path", inst.ProjectPath),
 			slog.Bool("sandbox", inst.IsSandboxed()),
 		)
-		if err := inst.Start(); err != nil {
+		if err := inst.StartWithStartupMessage(""); err != nil {
 			uiLog.Error("session_create_failed", slog.String("error", err.Error()))
 			return sessionCreatedMsg{err: err, tempID: tempID}
 		}
@@ -8585,7 +8636,7 @@ func (h *Home) forkSessionCmdWithOptions(
 			inst.SetParentWithPath(parentSessionID, parentProjectPath)
 		}
 
-		if err := inst.Start(); err != nil {
+		if err := inst.StartWithStartupMessage(""); err != nil {
 			return sessionForkedMsg{err: err, sourceID: sourceID}
 		}
 
@@ -9309,6 +9360,9 @@ func (h *Home) updateSizes() {
 	h.confirmDialog.SetSize(h.width, h.height)
 	h.geminiModelDialog.SetSize(h.width, h.height)
 	h.worktreeFinishDialog.SetSize(h.width, h.height)
+	h.editSessionDialog.SetSize(h.width, h.height)
+	h.editPathsDialog.SetSize(h.width, h.height)
+	h.roleEditorDialog.SetSize(h.width, h.height)
 	if h.feedbackDialog != nil {
 		h.feedbackDialog.SetSize(h.width, h.height)
 	}
@@ -9398,6 +9452,9 @@ func (h *Home) View() string {
 	}
 	if h.editSessionDialog.IsVisible() {
 		return h.editSessionDialog.View()
+	}
+	if h.roleEditorDialog.IsVisible() {
+		return h.roleEditorDialog.View()
 	}
 	if h.editPathsDialog.IsVisible() {
 		return h.editPathsDialog.View()
@@ -10446,6 +10503,7 @@ func (h *Home) renderHelpBarMinimal() string {
 	mcpKey := h.actionKey(hotkeyMCPManager)
 	skillsKey := h.actionKey(hotkeySkillsManager)
 	notesKey := h.actionKey(hotkeyEditNotes)
+	roleKey := h.actionKey(hotkeyEditRole)
 	if cfg, _ := session.LoadUserConfig(); cfg != nil && !cfg.GetShowNotes() {
 		notesKey = ""
 	}
@@ -10490,6 +10548,10 @@ func (h *Home) renderHelpBarMinimal() string {
 			notesRendered := renderKeys(notesKey)
 			if notesRendered != "" {
 				contextKeys += " " + notesRendered
+			}
+			roleRendered := renderKeys(roleKey)
+			if roleRendered != "" {
+				contextKeys += " " + roleRendered
 			}
 		}
 	}
@@ -10597,6 +10659,9 @@ func (h *Home) renderHelpBarCompact() string {
 			if key := h.actionKey(hotkeyEditNotes); key != "" {
 				contextHints = append(contextHints, h.helpKeyShort(key, "Notes"))
 			}
+			if key := h.actionKey(hotkeyEditRole); key != "" {
+				contextHints = append(contextHints, h.helpKeyShort(key, "Role"))
+			}
 		}
 	}
 
@@ -10694,6 +10759,7 @@ func (h *Home) renderHelpBarFull() string {
 	sendKey := h.actionKey(hotkeySendOutput)
 	execShellKey := h.actionKey(hotkeyExecShell)
 	notesKey := h.actionKey(hotkeyEditNotes)
+	roleKey := h.actionKey(hotkeyEditRole)
 	if cfg, _ := session.LoadUserConfig(); cfg != nil && !cfg.GetShowNotes() {
 		notesKey = ""
 	}
@@ -10785,6 +10851,9 @@ func (h *Home) renderHelpBarFull() string {
 			}
 			if notesKey != "" {
 				primaryHints = append(primaryHints, h.helpKey(notesKey, "Notes"))
+			}
+			if roleKey != "" {
+				primaryHints = append(primaryHints, h.helpKey(roleKey, "Role"))
 			}
 			if renameKey != "" {
 				secondaryHints = append(secondaryHints, h.helpKey(renameKey, "Rename"))

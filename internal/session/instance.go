@@ -144,13 +144,14 @@ type Instance struct {
 	// GitHub Copilot CLI integration
 	CopilotSessionID  string    `json:"copilot_session_id,omitempty"`
 	CopilotDetectedAt time.Time `json:"copilot_detected_at,omitempty"`
-	CopilotStartedAt  int64     `json:"-"` // Unix millis when we started Copilot (for session matching, not persisted)
+	CopilotStartedAt  int64     `json:"-"`                           // Unix millis when we started Copilot (for session matching, not persisted)
 	CopilotModel      string    `json:"copilot_model,omitempty"`     // Active model for this session
 	CopilotAllowAll   bool      `json:"copilot_allow_all,omitempty"` // Per-session --allow-all override
 
 	// Latest user input for context (extracted from session files)
 	LatestPrompt      string    `json:"latest_prompt,omitempty"`
 	Notes             string    `json:"notes,omitempty"`
+	RoleInstructions  string    `json:"role_instructions,omitempty"` // Persistent per-session role text, edited via TUI.
 	lastPromptModTime time.Time // mtime cache for updateGeminiLatestPrompt (not serialized)
 
 	// Color is an optional user-chosen tint for this session's TUI row (issue #391).
@@ -2529,6 +2530,9 @@ func (i *Instance) StartWithMessage(message string) error {
 		}
 	case i.Tool == "gemini":
 		command = i.buildGeminiCommand(i.Command)
+	case i.Tool == "copilot":
+		command = buildCopilotCommand(i)
+		i.CopilotStartedAt = time.Now().UnixMilli()
 	case i.Tool == "opencode":
 		command = i.buildOpenCodeCommand(i.Command)
 		i.OpenCodeStartedAt = time.Now().UnixMilli()
@@ -2621,6 +2625,9 @@ func (i *Instance) StartWithMessage(message string) error {
 	}
 	if IsCodexCompatible(i.Tool) {
 		go i.detectCodexSessionAsync()
+	}
+	if i.Tool == "copilot" && i.CopilotSessionID == "" {
+		go i.detectCopilotSessionAsync()
 	}
 
 	// Send message synchronously (CLI will wait)
@@ -4879,7 +4886,7 @@ func (i *Instance) RestartFresh() error {
 
 	i.recreateTmuxSession()
 
-	if err := i.Start(); err != nil {
+	if err := i.StartWithStartupMessage(""); err != nil {
 		i.Status = StatusError
 		return fmt.Errorf("failed to restart session fresh: %w", err)
 	}

@@ -188,6 +188,7 @@ func (h *HelpOverlay) View() string {
 	sendKey := h.key(hotkeySendOutput, "x")
 	execShellKey := h.key(hotkeyExecShell, "E")
 	notesKey := h.key(hotkeyEditNotes, "e")
+	roleKey := h.key(hotkeyEditRole, "I")
 	if cfg, _ := session.LoadUserConfig(); cfg != nil && !cfg.GetShowNotes() {
 		notesKey = ""
 	}
@@ -254,6 +255,7 @@ func (h *HelpOverlay) View() string {
 				{editPathsKey, "Edit multi-repo paths"},
 				{editSessionKey, "Edit session settings (title/color/...)"},
 				{notesKey, "Edit notes"},
+				{roleKey, "Edit persistent role instructions"},
 			},
 		},
 		{

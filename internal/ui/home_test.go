@@ -901,6 +901,99 @@ func TestHandleNotesEditorKeySave(t *testing.T) {
 	}
 }
 
+func TestHandleRoleEditorKeySave(t *testing.T) {
+	home := NewHome()
+	home.width = 120
+	home.height = 40
+	home.storage = nil
+
+	inst := &session.Instance{
+		ID:               "session-save-role",
+		Title:            "Save Role",
+		Tool:             "copilot",
+		GroupPath:        "engineering",
+		RoleInstructions: "before",
+	}
+	home.flatItems = []session.Item{{Type: session.ItemTypeSession, Session: inst}}
+	home.cursor = 0
+	home.instanceByID[inst.ID] = inst
+
+	home.beginRoleEditing(inst)
+	home.roleEditorDialog.editor.SetValue("# Role\n\nafter")
+
+	model, _ := home.handleRoleEditorDialogKey(tea.KeyMsg{Type: tea.KeyCtrlS})
+	h, ok := model.(*Home)
+	if !ok {
+		t.Fatal("handleRoleEditorDialogKey should return *Home")
+	}
+	if got := inst.RoleInstructions; got != "# Role\n\nafter" {
+		t.Fatalf("session role instructions = %q, want %q", got, "# Role\n\nafter")
+	}
+	if h.roleEditorDialog.IsVisible() {
+		t.Fatal("role editor should close after save")
+	}
+}
+
+func TestHomeView_ShowsRoleEditor(t *testing.T) {
+	home := NewHome()
+	home.width = 120
+	home.height = 40
+	home.initialLoading = false
+
+	inst := &session.Instance{
+		ID:               "role-view",
+		Title:            "Role View",
+		Tool:             "claude",
+		GroupPath:        "ops",
+		RoleInstructions: "# Role\n\n- review output",
+	}
+	home.beginRoleEditing(inst)
+
+	view := home.View()
+	if !strings.Contains(view, "Role Instructions") {
+		t.Fatalf("View() should render role editor, got %q", view)
+	}
+	if strings.Contains(view, "Preview") {
+		t.Fatalf("View() should not render preview pane, got %q", view)
+	}
+	if !strings.Contains(view, "Ln 3/3") {
+		t.Fatalf("View() should show current line position, got %q", view)
+	}
+	if !strings.Contains(view, "Ctrl+S Save") {
+		t.Fatalf("View() should show footer shortcut hints, got %q", view)
+	}
+	if !strings.Contains(view, "╮") || !strings.Contains(view, "╯") {
+		t.Fatalf("View() should render visible right-side borders, got %q", view)
+	}
+}
+
+func TestHomeView_RoleEditorFitsSmallTerminal(t *testing.T) {
+	home := NewHome()
+	home.width = 92
+	home.height = 24
+	home.initialLoading = false
+
+	inst := &session.Instance{
+		ID:               "role-small-terminal",
+		Title:            "Role Small",
+		Tool:             "copilot",
+		GroupPath:        "ops",
+		RoleInstructions: "# Role\n\n- review\n- summarize",
+	}
+	home.beginRoleEditing(inst)
+
+	view := home.View()
+	lines := strings.Split(view, "\n")
+	if len(lines) > home.height {
+		t.Fatalf("View() rendered %d lines, exceeds terminal height %d", len(lines), home.height)
+	}
+	for i, line := range lines {
+		if lipgloss.Width(line) > home.width {
+			t.Fatalf("line %d width %d exceeds terminal width %d: %q", i, lipgloss.Width(line), home.width, line)
+		}
+	}
+}
+
 func TestNotesSectionLineBudget(t *testing.T) {
 	tests := []struct {
 		name          string

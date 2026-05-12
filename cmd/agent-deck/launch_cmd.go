@@ -403,10 +403,11 @@ func handleLaunch(profile string, args []string) {
 	}
 
 	// Start the session.
-	// - default: StartWithMessage waits for readiness and delivers initial prompt
+	// - default: wait for readiness and deliver the persistent role text and/or
+	//   one-shot initial prompt
 	// - --no-wait: start immediately, then fire-and-forget send below
-	if initialMessage != "" && !*noWait {
-		if err := newInstance.StartWithMessage(initialMessage); err != nil {
+	if !*noWait {
+		if err := newInstance.StartWithStartupMessage(initialMessage); err != nil {
 			out.Error(fmt.Sprintf("failed to start session: %v", err), ErrCodeInvalidOperation)
 			os.Exit(1)
 		}
@@ -435,10 +436,11 @@ func handleLaunch(profile string, args []string) {
 	// sendWithRetryTarget pass, run verifyPromptConsumedAfterLaunch to catch
 	// the welcome-screen race where claude eats the first Enter. 10s budget
 	// per window + single retry + stderr warning on persistent no-op.
-	if initialMessage != "" && *noWait {
+	startupMessage := newInstance.ComposeStartupMessage(initialMessage)
+	if startupMessage != "" && *noWait {
 		tmuxSess := newInstance.GetTmuxSession()
 		if tmuxSess != nil {
-			if err := sendWithRetryTarget(tmuxSess, initialMessage, false, sendRetryOptions{
+			if err := sendWithRetryTarget(tmuxSess, startupMessage, false, sendRetryOptions{
 				maxRetries: 8,
 				checkDelay: 150 * time.Millisecond,
 			}); err != nil {
@@ -446,7 +448,7 @@ func handleLaunch(profile string, args []string) {
 				os.Exit(1)
 			}
 			verifyPromptConsumedAfterLaunch(
-				tmuxSess, initialMessage,
+				tmuxSess, startupMessage,
 				10*time.Second, 250*time.Millisecond,
 				os.Stderr,
 			)

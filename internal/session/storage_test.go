@@ -185,6 +185,39 @@ func TestLoadLiteEmptyDB(t *testing.T) {
 	}
 }
 
+func TestStorageSaveWithGroups_PersistsRoleInstructions(t *testing.T) {
+	s := newTestStorage(t)
+
+	instances := []*Instance{
+		{
+			ID:               "role-1",
+			Title:            "Role Session",
+			ProjectPath:      "/tmp/role",
+			GroupPath:        "test-group",
+			Command:          "copilot",
+			Tool:             "copilot",
+			Status:           StatusIdle,
+			CreatedAt:        time.Now(),
+			RoleInstructions: "# Role\nBe concise.",
+		},
+	}
+
+	if err := s.SaveWithGroups(instances, nil); err != nil {
+		t.Fatalf("SaveWithGroups failed: %v", err)
+	}
+
+	loaded, _, err := s.LoadWithGroups()
+	if err != nil {
+		t.Fatalf("LoadWithGroups failed: %v", err)
+	}
+	if len(loaded) != 1 {
+		t.Fatalf("expected 1 loaded instance, got %d", len(loaded))
+	}
+	if got := loaded[0].RoleInstructions; got != "# Role\nBe concise." {
+		t.Fatalf("RoleInstructions = %q, want %q", got, "# Role\nBe concise.")
+	}
+}
+
 func TestStorageSaveWithGroups_DedupsClaudeSessionIDs(t *testing.T) {
 	s := newTestStorage(t)
 	now := time.Now()
