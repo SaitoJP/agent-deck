@@ -579,8 +579,22 @@ func detectToolFromCommand(command string) string {
 	}
 
 	fields := strings.Fields(cmdLower)
-	if len(fields) > 0 {
-		base := filepath.Base(fields[0])
+	for _, field := range fields {
+		candidate := strings.Trim(field, `"'();`)
+		if candidate == "" {
+			continue
+		}
+		// Skip inline env assignments and shell control tokens so wrapped
+		// commands like `export X=1; exec copilot --model claude-sonnet-4.6`
+		// still resolve to the actual tool binary.
+		if candidate == "exec" || candidate == "env" || candidate == "export" ||
+			candidate == "&&" || candidate == "||" {
+			continue
+		}
+		if strings.Contains(candidate, "=") && !strings.Contains(candidate, "/") {
+			continue
+		}
+		base := filepath.Base(candidate)
 		switch base {
 		case "claude":
 			return "claude"

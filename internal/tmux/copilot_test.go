@@ -14,6 +14,11 @@ func TestDetectToolFromCommand_Copilot(t *testing.T) {
 		{"copilot with resume flag", "copilot --resume", "copilot"},
 		{"copilot via npx", "npx @github/copilot", "copilot"},
 		{"uppercase binary", "COPILOT", "copilot"},
+		{
+			"copilot wrapped with exec and claude model",
+			`export AGENTDECK_INSTANCE_ID=abc; exec copilot --model claude-sonnet-4.6`,
+			"copilot",
+		},
 	}
 
 	for _, tt := range tests {
