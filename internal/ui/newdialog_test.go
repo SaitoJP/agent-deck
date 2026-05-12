@@ -69,6 +69,33 @@ func TestDialogPresetCommands(t *testing.T) {
 	}
 }
 
+func TestNewDialog_GetCopilotOptions(t *testing.T) {
+	d := NewNewDialog()
+	for i, cmd := range d.presetCommands {
+		if cmd == "copilot" {
+			d.commandCursor = i
+			break
+		}
+	}
+	d.updateToolOptions()
+	d.copilotOptions.SetFromOptions(&session.CopilotOptions{
+		SessionMode: "new",
+		Model:       "claude-sonnet-4.6",
+		AllowAll:    true,
+	})
+
+	opts := d.GetCopilotOptions()
+	if opts == nil {
+		t.Fatal("GetCopilotOptions() = nil, want non-nil for copilot")
+	}
+	if opts.Model != "claude-sonnet-4.6" {
+		t.Fatalf("GetCopilotOptions().Model = %q, want %q", opts.Model, "claude-sonnet-4.6")
+	}
+	if !opts.AllowAll {
+		t.Fatal("GetCopilotOptions().AllowAll = false, want true")
+	}
+}
+
 func TestDialogGetValues(t *testing.T) {
 	d := NewNewDialog()
 	d.nameInput.SetValue("my-session")

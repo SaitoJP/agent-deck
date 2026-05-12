@@ -20,10 +20,29 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+func prepareUpdateNudgeConfig(t *testing.T, body string) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	session.ClearUserConfigCache()
+	t.Cleanup(session.ClearUserConfigCache)
+	if body == "" {
+		return
+	}
+	cfgDir := filepath.Join(home, ".agent-deck")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatalf("mkdir .agent-deck: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+}
+
 // TestUpdateNudge_ShowsOnlyWhenSixPlusBehind pins the threshold contract.
 // The existing banner (pre-v1.7.59) fired at >=1 behind; the new nudge
 // is a separate, louder signal that only fires at >5 behind.
 func TestUpdateNudge_ShowsOnlyWhenSixPlusBehind(t *testing.T) {
+	prepareUpdateNudgeConfig(t, "")
 	tests := []struct {
 		name string
 		info *update.UpdateInfo
@@ -51,6 +70,7 @@ func TestUpdateNudge_ShowsOnlyWhenSixPlusBehind(t *testing.T) {
 // dismiss: after the user hits "U", the nudge stops rendering until the
 // process exits — even if a later update-check refreshes updateInfo.
 func TestUpdateNudge_DismissKeySuppressesBanner(t *testing.T) {
+	prepareUpdateNudgeConfig(t, "")
 	h := &Home{
 		updateInfo: &update.UpdateInfo{
 			Available:      true,
@@ -80,6 +100,7 @@ func TestUpdateNudge_DismissKeySuppressesBanner(t *testing.T) {
 // injection in tests), AGENTDECK_SKIP_UPDATE_CHECK=1 keeps the nudge
 // hidden.
 func TestUpdateNudge_EnvVarSuppressesBanner(t *testing.T) {
+	prepareUpdateNudgeConfig(t, "")
 	t.Setenv("AGENTDECK_SKIP_UPDATE_CHECK", "1")
 	h := &Home{
 		updateInfo: &update.UpdateInfo{
@@ -93,23 +114,12 @@ func TestUpdateNudge_EnvVarSuppressesBanner(t *testing.T) {
 }
 
 func TestUpdateNudge_ConfigSuppressesBanner(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	session.ClearUserConfigCache()
-	t.Cleanup(session.ClearUserConfigCache)
-
-	cfgDir := filepath.Join(home, ".agent-deck")
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
-		t.Fatalf("mkdir .agent-deck: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(`
+	prepareUpdateNudgeConfig(t, `
 [updates]
 check_enabled = true
 check_interval_hours = 24
 notify_in_tui = false
-`), 0o600); err != nil {
-		t.Fatalf("write config.toml: %v", err)
-	}
+`)
 
 	h := &Home{
 		updateInfo: &update.UpdateInfo{
@@ -127,6 +137,7 @@ notify_in_tui = false
 // informative than the legacy banner. Users reported from 15-39 versions
 // old — they need to see the number to feel the urgency.
 func TestUpdateNudge_BannerTextIncludesBehindCount(t *testing.T) {
+	prepareUpdateNudgeConfig(t, "")
 	h := &Home{
 		updateInfo: &update.UpdateInfo{
 			Available:      true,

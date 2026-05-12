@@ -149,9 +149,10 @@ type NewDialog struct {
 	claudeOptions        *ClaudeOptionsPanel // Claude-specific options (concrete for value extraction).
 	geminiOptions        *YoloOptionsPanel   // Gemini YOLO panel (concrete for value extraction).
 	codexOptions         *YoloOptionsPanel   // Codex YOLO panel (concrete for value extraction).
-	toolOptions          OptionsPanel        // Currently active tool options panel (nil if none).
-	focusTargets         []focusTarget       // Ordered list of active focusable elements.
-	focusIndex           int                 // Index into focusTargets.
+	copilotOptions       *CopilotOptionsPanel
+	toolOptions          OptionsPanel  // Currently active tool options panel (nil if none).
+	focusTargets         []focusTarget // Ordered list of active focusable elements.
+	focusIndex           int           // Index into focusTargets.
 	width                int
 	height               int
 	visible              bool
@@ -206,6 +207,7 @@ type dialogSnapshot struct {
 	branch           string
 	branchAutoSet    bool
 	claudeOptions    *session.ClaudeOptions
+	copilotOptions   *session.CopilotOptions
 	geminiYolo       bool
 	codexYolo        bool
 	multiRepoEnabled bool
@@ -296,6 +298,7 @@ func NewNewDialog() *NewDialog {
 		claudeOptions:   NewClaudeOptionsPanel(),
 		geminiOptions:   NewYoloOptionsPanel("Gemini", "YOLO mode - auto-approve all"),
 		codexOptions:    NewYoloOptionsPanel("Codex", "YOLO mode - bypass approvals and sandbox"),
+		copilotOptions:  NewCopilotOptionsPanel(),
 		focusIndex:      0,
 		visible:         false,
 		presetCommands:  buildPresetCommands(),
@@ -343,6 +346,7 @@ func (d *NewDialog) ShowInGroup(groupPath, groupName, defaultPath string, conduc
 	d.claudeOptions.ResetStartQuery() // #741: per-session query must not leak across openings
 	d.geminiOptions.Blur()
 	d.codexOptions.Blur()
+	d.copilotOptions.Blur()
 	if d.branchPicker != nil {
 		d.branchPicker.Hide()
 	}
@@ -375,10 +379,12 @@ func (d *NewDialog) ShowInGroup(groupPath, groupName, defaultPath string, conduc
 	// Initialize tool options from global config.
 	d.geminiOptions.SetDefaults(false)
 	d.codexOptions.SetDefaults(false)
+	d.copilotOptions.SetDefaults(nil)
 	if userConfig, err := session.LoadUserConfig(); err == nil && userConfig != nil {
 		d.geminiOptions.SetDefaults(userConfig.Gemini.YoloMode)
 		d.codexOptions.SetDefaults(userConfig.Codex.YoloMode)
 		d.claudeOptions.SetDefaults(userConfig)
+		d.copilotOptions.SetDefaults(userConfig)
 		d.sandboxEnabled = userConfig.Docker.DefaultEnabled
 		d.worktreeEnabled = userConfig.Worktree.DefaultEnabled
 		if d.worktreeEnabled {
@@ -497,6 +503,11 @@ func (d *NewDialog) saveSnapshot() *dialogSnapshot {
 		copy := *claudeOpts
 		claudeOpts = &copy
 	}
+	copilotOpts := d.copilotOptions.GetOptions()
+	if copilotOpts != nil {
+		copy := *copilotOpts
+		copilotOpts = &copy
+	}
 
 	return &dialogSnapshot{
 		name:             d.nameInput.Value(),
@@ -508,6 +519,7 @@ func (d *NewDialog) saveSnapshot() *dialogSnapshot {
 		branch:           d.branchInput.Value(),
 		branchAutoSet:    d.branchAutoSet,
 		claudeOptions:    claudeOpts,
+		copilotOptions:   copilotOpts,
 		geminiYolo:       d.geminiOptions.GetYoloMode(),
 		codexYolo:        d.codexOptions.GetYoloMode(),
 		multiRepoEnabled: d.multiRepoEnabled,
@@ -528,6 +540,9 @@ func (d *NewDialog) restoreSnapshot(s *dialogSnapshot) {
 	d.branchAutoSet = s.branchAutoSet
 	if s.claudeOptions != nil {
 		d.claudeOptions.SetFromOptions(s.claudeOptions)
+	}
+	if s.copilotOptions != nil {
+		d.copilotOptions.SetFromOptions(s.copilotOptions)
 	}
 	d.geminiOptions.SetDefaults(s.geminiYolo)
 	d.codexOptions.SetDefaults(s.codexYolo)
@@ -590,6 +605,14 @@ func (d *NewDialog) previewRecentSession(rs *statedb.RecentSessionRow) {
 				var opts session.CodexOptions
 				if err := json.Unmarshal(wrapper.Options, &opts); err == nil && opts.YoloMode != nil {
 					d.codexOptions.SetDefaults(*opts.YoloMode)
+				}
+			}
+		case rs.Tool == "copilot":
+			var wrapper session.ToolOptionsWrapper
+			if err := json.Unmarshal(rs.ToolOptions, &wrapper); err == nil && wrapper.Tool == "copilot" {
+				var opts session.CopilotOptions
+				if err := json.Unmarshal(wrapper.Options, &opts); err == nil {
+					d.copilotOptions.SetFromOptions(&opts)
 				}
 			}
 		}
@@ -718,6 +741,14 @@ func (d *NewDialog) IsGeminiYoloMode() bool {
 // GetCodexYoloMode returns the Codex YOLO mode state
 func (d *NewDialog) GetCodexYoloMode() bool {
 	return d.codexOptions.GetYoloMode()
+}
+
+// GetCopilotOptions returns Copilot-specific options for Copilot sessions.
+func (d *NewDialog) GetCopilotOptions() *session.CopilotOptions {
+	if d.GetSelectedCommand() != "copilot" {
+		return nil
+	}
+	return d.copilotOptions.GetOptions()
 }
 
 // IsSandboxEnabled returns whether Docker sandbox mode is enabled.
@@ -956,6 +987,8 @@ func (d *NewDialog) updateToolOptions() {
 		d.toolOptions = d.geminiOptions
 	case cmd == "codex":
 		d.toolOptions = d.codexOptions
+	case cmd == "copilot":
+		d.toolOptions = d.copilotOptions
 	default:
 		d.toolOptions = nil
 	}
@@ -970,6 +1003,7 @@ func (d *NewDialog) updateFocus() {
 	d.claudeOptions.Blur()
 	d.geminiOptions.Blur()
 	d.codexOptions.Blur()
+	d.copilotOptions.Blur()
 
 	// Reset dropdown and soft-select state when focus changes.
 	d.pathSoftSelected = false

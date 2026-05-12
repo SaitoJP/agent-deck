@@ -5233,6 +5233,10 @@ func (h *Home) handleNewDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			yolo := h.newDialog.GetCodexYoloMode()
 			codexOpts := &session.CodexOptions{YoloMode: &yolo}
 			toolOptionsJSON, _ = session.MarshalToolOptions(codexOpts)
+		} else if command == "copilot" {
+			if copilotOpts := h.newDialog.GetCopilotOptions(); copilotOpts != nil {
+				toolOptionsJSON, _ = session.MarshalToolOptions(copilotOpts)
+			}
 		}
 
 		parentSessionID := h.newDialog.GetParentSessionID()
@@ -8182,6 +8186,12 @@ func applyCreateSessionToolOverrides(inst *session.Instance, tool string, gemini
 	}
 	if tool == "gemini" {
 		inst.SetGeminiYoloMode(geminiYoloMode)
+	}
+	if tool == "copilot" {
+		if opts := inst.GetCopilotOptions(); opts != nil {
+			inst.CopilotModel = strings.TrimSpace(opts.Model)
+			inst.CopilotAllowAll = opts.AllowAll
+		}
 	}
 }
 
