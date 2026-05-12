@@ -399,6 +399,23 @@ type UpdateSettings struct {
 	// NotifyInCLI shows update notification in CLI commands (not just TUI)
 	// Default: true
 	NotifyInCLI bool `toml:"notify_in_cli"`
+
+	// NotifyInTUI shows the update banner in the TUI header area
+	// Default: true (pointer distinguishes "unset" from "explicit false")
+	NotifyInTUI *bool `toml:"notify_in_tui"`
+}
+
+func updateBoolPtr(v bool) *bool {
+	return &v
+}
+
+// GetNotifyInTUI returns whether the update banner should render in the TUI.
+// Default: true
+func (u UpdateSettings) GetNotifyInTUI() bool {
+	if u.NotifyInTUI == nil {
+		return true
+	}
+	return *u.NotifyInTUI
 }
 
 // PreviewSettings defines preview pane configuration
@@ -2124,6 +2141,7 @@ func GetUpdateSettings() UpdateSettings {
 			CheckEnabled:       true,
 			CheckIntervalHours: 24,
 			NotifyInCLI:        true,
+			NotifyInTUI:        updateBoolPtr(true),
 		}
 	}
 
@@ -2138,6 +2156,9 @@ func GetUpdateSettings() UpdateSettings {
 	}
 	if settings.CheckIntervalHours <= 0 {
 		settings.CheckIntervalHours = 24
+	}
+	if settings.NotifyInTUI == nil {
+		settings.NotifyInTUI = updateBoolPtr(true)
 	}
 
 	return settings
@@ -2460,6 +2481,9 @@ check_enabled = true
 check_interval_hours = 24
 # Show update notification in CLI commands, not just TUI (default: true)
 notify_in_cli = true
+# Show update banner in the TUI header area (default: true)
+# Set to false to hide the "Update available" banner at the top of the screen
+notify_in_tui = true
 
 # Experiments (for 'agent-deck try' command)
 # Quick experiment folder management with auto-dated directories

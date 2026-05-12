@@ -11,8 +11,11 @@ package ui
 // honors AGENTDECK_SKIP_UPDATE_CHECK=1 for locked-down environments.
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/asheshgoplani/agent-deck/internal/session"
 	"github.com/asheshgoplani/agent-deck/internal/update"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -86,6 +89,36 @@ func TestUpdateNudge_EnvVarSuppressesBanner(t *testing.T) {
 	}
 	if h.shouldRenderUpdateNudge() {
 		t.Fatalf("env-gated: shouldRenderUpdateNudge must be false when AGENTDECK_SKIP_UPDATE_CHECK=1")
+	}
+}
+
+func TestUpdateNudge_ConfigSuppressesBanner(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	session.ClearUserConfigCache()
+	t.Cleanup(session.ClearUserConfigCache)
+
+	cfgDir := filepath.Join(home, ".agent-deck")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatalf("mkdir .agent-deck: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(`
+[updates]
+check_enabled = true
+check_interval_hours = 24
+notify_in_tui = false
+`), 0o600); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+
+	h := &Home{
+		updateInfo: &update.UpdateInfo{
+			Available:      true,
+			ReleasesBehind: 40,
+		},
+	}
+	if h.shouldRenderUpdateNudge() {
+		t.Fatalf("config-gated: shouldRenderUpdateNudge must be false when [updates].notify_in_tui=false")
 	}
 }
 

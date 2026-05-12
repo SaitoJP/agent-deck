@@ -210,6 +210,7 @@ auto_update = false           # Auto-install updates
 check_enabled = true          # Check on startup
 check_interval_hours = 24     # Check frequency
 notify_in_cli = true          # Show in CLI commands
+notify_in_tui = true          # Show top banner in TUI
 ```
 
 | Key | Type | Default | Description |
@@ -218,6 +219,7 @@ notify_in_cli = true          # Show in CLI commands
 | `check_enabled` | bool | `true` | Enable startup update checks. |
 | `check_interval_hours` | int | `24` | Hours between checks. |
 | `notify_in_cli` | bool | `true` | Show updates in CLI (not just TUI). |
+| `notify_in_tui` | bool | `true` | Show the update banner in the TUI header area. |
 
 ## [display] Section
 
@@ -484,6 +486,7 @@ remove_orphans = true
 [updates]
 check_enabled = true
 check_interval_hours = 24
+notify_in_tui = true
 
 [global_search]
 enabled = true

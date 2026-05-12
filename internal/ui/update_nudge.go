@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 
+	"github.com/asheshgoplani/agent-deck/internal/session"
 	"github.com/asheshgoplani/agent-deck/internal/update"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -17,6 +18,9 @@ import (
 //  4. AGENTDECK_SKIP_UPDATE_CHECK is set (ShouldNudge checks this).
 func (h *Home) shouldRenderUpdateNudge() bool {
 	if h.updateNudgeDismissed {
+		return false
+	}
+	if !session.GetUpdateSettings().GetNotifyInTUI() {
 		return false
 	}
 	return update.ShouldNudge(h.updateInfo)
