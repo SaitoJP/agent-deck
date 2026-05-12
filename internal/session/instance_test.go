@@ -2073,6 +2073,21 @@ func TestInstance_CanRestart_Gemini(t *testing.T) {
 	}
 }
 
+func TestInstance_CanRestart_Copilot(t *testing.T) {
+	inst := NewInstanceWithTool("copilot-restart-test", "/tmp", "copilot")
+	inst.Command = "copilot"
+	inst.Status = StatusRunning
+
+	if !inst.CanRestart() {
+		t.Fatal("CanRestart() should allow fresh Copilot restarts without a stored session ID")
+	}
+
+	inst.CopilotSessionID = "copilot-session-123"
+	if !inst.CanRestart() {
+		t.Fatal("CanRestart() should allow Copilot restarts with a stored session ID")
+	}
+}
+
 // TestInstance_Fork_PathWithSpaces tests that Fork() properly quotes paths with spaces
 // Issue #16: Fork command breaks for project paths with spaces
 func TestInstance_Fork_PathWithSpaces(t *testing.T) {

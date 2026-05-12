@@ -71,6 +71,24 @@ func TestEval_EditSessionDialog_ShellToolHidesExtraArgs(t *testing.T) {
 	}
 }
 
+func TestEval_EditSessionDialog_CopilotToolShowsModelField(t *testing.T) {
+	d := NewEditSessionDialog()
+	d.SetSize(100, 40)
+	d.Show(&session.Instance{
+		ID:           "sess-eval-copilot",
+		Title:        "copilot-session",
+		Tool:         "copilot",
+		CopilotModel: "claude-sonnet-4.6",
+	})
+
+	view := d.View()
+	for _, tok := range []string{"copilot-session", "Model (restart, copilot)", "claude-sonnet-4.6"} {
+		if !strings.Contains(view, tok) {
+			t.Errorf("View() missing expected token %q.\nFull view:\n%s", tok, view)
+		}
+	}
+}
+
 // "Why isn't my rename applying?" — a misplaced return in the navigation
 // switch could swallow runes before they reach the textinput, leaving the
 // dialog looking edited but GetChanges empty.

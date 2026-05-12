@@ -208,10 +208,7 @@ func buildCopilotCommand(i *Instance) string {
 		}
 	}
 
-	baseCmd := i.Command
-	if baseCmd == "" {
-		baseCmd = "copilot"
-	}
+	baseCmd := normalizeCopilotBaseCommand(i.Command)
 
 	initialPromptFlag := ""
 	if i.IsConductor {
@@ -248,6 +245,18 @@ func buildCopilotCommand(i *Instance) string {
 		allowAllFlag,
 		initialPromptFlag,
 	)
+}
+
+func normalizeCopilotBaseCommand(command string) string {
+	trimmed := strings.TrimSpace(command)
+	switch {
+	case trimmed == "", trimmed == "copilot", strings.HasPrefix(trimmed, "copilot "):
+		return "copilot"
+	case trimmed == "npx @github/copilot", strings.HasPrefix(trimmed, "npx @github/copilot "):
+		return "npx @github/copilot"
+	default:
+		return trimmed
+	}
 }
 
 // detectCopilotSessionAsync detects the Copilot session ID asynchronously

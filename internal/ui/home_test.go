@@ -934,6 +934,55 @@ func TestHandleRoleEditorKeySave(t *testing.T) {
 	}
 }
 
+func TestHandleEditSessionDialogKeySave_CopilotModel(t *testing.T) {
+	home := NewHome()
+	home.width = 120
+	home.height = 40
+	home.storage = nil
+
+	inst := &session.Instance{
+		ID:               "session-save-copilot-model",
+		Title:            "Save Copilot Model",
+		Tool:             "copilot",
+		Command:          "copilot --allow-all --model claude-sonnet-4.6",
+		CopilotModel:     "claude-sonnet-4.6",
+		CopilotSessionID: "copilot-session-123",
+	}
+	home.flatItems = []session.Item{{Type: session.ItemTypeSession, Session: inst}}
+	home.cursor = 0
+	home.instanceByID[inst.ID] = inst
+
+	home.editSessionDialog.Show(inst)
+	for i := range home.editSessionDialog.fields {
+		if home.editSessionDialog.fields[i].key == editFieldCopilotModel {
+			home.editSessionDialog.fields[i].input.SetValue("gpt-5.4")
+			break
+		}
+	}
+
+	model, _ := home.handleEditSessionDialogKey(tea.KeyMsg{Type: tea.KeyEnter})
+	h, ok := model.(*Home)
+	if !ok {
+		t.Fatal("handleEditSessionDialogKey should return *Home")
+	}
+	if got := inst.CopilotModel; got != "gpt-5.4" {
+		t.Fatalf("session copilot model = %q, want %q", got, "gpt-5.4")
+	}
+	if got := inst.Command; got != "copilot" {
+		t.Fatalf("session command = %q, want canonical %q", got, "copilot")
+	}
+	if inst.CopilotSessionID != "" {
+		t.Fatalf("session copilot session id = %q, want cleared for fresh restart", inst.CopilotSessionID)
+	}
+	opts := inst.GetCopilotOptions()
+	if opts == nil || opts.Model != "gpt-5.4" {
+		t.Fatalf("copilot options = %+v, want model gpt-5.4", opts)
+	}
+	if h.editSessionDialog.IsVisible() {
+		t.Fatal("edit session dialog should close after save")
+	}
+}
+
 func TestHomeView_ShowsRoleEditor(t *testing.T) {
 	home := NewHome()
 	home.width = 120

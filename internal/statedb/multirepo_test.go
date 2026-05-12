@@ -16,6 +16,7 @@ func TestMarshalUnmarshalToolData_MultiRepo(t *testing.T) {
 	data := MarshalToolData(
 		"", time.Time{}, // claude
 		"", time.Time{}, nil, "", // gemini
+		"", time.Time{}, "", false, // copilot
 		"", time.Time{}, // opencode
 		"", time.Time{}, // codex
 		"", "", "", nil, nil, // prompt, notes, role, mcps, toolopts
@@ -28,7 +29,7 @@ func TestMarshalUnmarshalToolData_MultiRepo(t *testing.T) {
 		"",  // color (issue #391)
 	)
 
-	_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+	_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
 		mrEnabled, addPaths, mrTempDir, mrWorktrees, _, _, _ := UnmarshalToolData(data)
 
 	assert.True(t, mrEnabled)
@@ -45,6 +46,7 @@ func TestMarshalUnmarshalToolData_NoMultiRepo(t *testing.T) {
 	data := MarshalToolData(
 		"claude-123", time.Now(),
 		"", time.Time{}, nil, "",
+		"", time.Time{}, "", false,
 		"", time.Time{},
 		"", time.Time{},
 		"prompt", "notes", "", []string{"mcp1"}, nil,
@@ -56,7 +58,7 @@ func TestMarshalUnmarshalToolData_NoMultiRepo(t *testing.T) {
 		"",  // color (issue #391)
 	)
 
-	claudeSID, _, _, _, _, _, _, _, _, _, prompt, notes, _, mcps, _, _, _, _, _,
+	claudeSID, _, _, _, _, _, _, _, _, _, _, _, _, _, prompt, notes, _, mcps, _, _, _, _, _,
 		mrEnabled, addPaths, mrTempDir, mrWorktrees, _, _, _ := UnmarshalToolData(data)
 
 	assert.Equal(t, "claude-123", claudeSID)

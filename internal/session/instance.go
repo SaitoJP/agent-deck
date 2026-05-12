@@ -4588,6 +4588,37 @@ func (i *Instance) Restart() error {
 		return nil
 	}
 
+	// Copilot restart uses the same command builder as Start(): resume when a
+	// bound session still exists, otherwise start fresh so model changes can
+	// take effect.
+	if i.Tool == "copilot" && i.tmuxSession != nil && i.tmuxSession.Exists() {
+		if i.CopilotSessionID == "" {
+			i.CopilotStartedAt = time.Now().UnixMilli()
+		}
+		resumeCmd, containerName, err := i.prepareCommand(buildCopilotCommand(i))
+		if err != nil {
+			return err
+		}
+		if containerName != "" {
+			i.SandboxContainer = containerName
+		}
+		sessionLog.Info("restart_copilot_respawn", slog.String("command", resumeCmd))
+
+		if err := i.tmuxSession.RespawnPane(resumeCmd); err != nil {
+			sessionLog.Info("restart_copilot_respawn_failed", slog.String("error", err.Error()))
+			return fmt.Errorf("failed to restart Copilot session: %w", err)
+		}
+
+		if i.CopilotSessionID == "" {
+			go i.detectCopilotSessionAsync()
+		}
+
+		sessionLog.Info("restart_copilot_respawn_succeeded")
+		i.sweepDuplicateToolSessions()
+		i.Status = StatusWaiting
+		return nil
+	}
+
 	// If OpenCode session AND tmux session exists, use respawn-pane
 	if i.Tool == "opencode" && i.tmuxSession != nil && i.tmuxSession.Exists() {
 		// Refresh from OpenCode state before deciding the resume target.
@@ -4778,6 +4809,11 @@ func (i *Instance) Restart() error {
 			command = i.buildClaudeCommand(i.Command)
 		case i.Tool == "gemini":
 			command = i.buildGeminiCommand(i.Command)
+		case i.Tool == "copilot":
+			command = buildCopilotCommand(i)
+			if i.CopilotSessionID == "" {
+				i.CopilotStartedAt = time.Now().UnixMilli()
+			}
 		case i.Tool == "opencode":
 			command = i.buildOpenCodeCommand(i.Command)
 			// Record start time for async session ID detection
@@ -4858,6 +4894,11 @@ func (i *Instance) Restart() error {
 	// Start async session ID detection for Codex (if no ID yet)
 	if IsCodexCompatible(i.Tool) && i.CodexSessionID == "" {
 		go i.detectCodexSessionAsync()
+	}
+
+	// Start async session ID detection for Copilot (if no ID yet)
+	if i.Tool == "copilot" && i.CopilotSessionID == "" {
+		go i.detectCopilotSessionAsync()
 	}
 
 	// Start as WAITING - will go GREEN on next tick if Claude shows busy indicator
@@ -5029,6 +5070,11 @@ func (i *Instance) SetGeminiModel(model string) error {
 // For custom tools with session resume config: can restart if session ID available
 // For other sessions: only if dead/error state
 func (i *Instance) CanRestart() bool {
+	// Copilot sessions can always restart; without a stored ID they just start fresh.
+	if i.Tool == "copilot" {
+		return true
+	}
+
 	// Gemini sessions with known session ID can always be restarted
 	if i.Tool == "gemini" && i.GeminiSessionID != "" {
 		return true

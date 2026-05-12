@@ -70,9 +70,19 @@ func (d *RoleEditorDialog) IsVisible() bool {
 	return d.visible
 }
 
-func (d *RoleEditorDialog) SetSize(w, h int)  { d.width, d.height = w, h }
+func (d *RoleEditorDialog) SetSize(w, h int) {
+	if d == nil {
+		return
+	}
+	d.width, d.height = w, h
+}
 func (d *RoleEditorDialog) SessionID() string { return d.sessionID }
-func (d *RoleEditorDialog) Value() string     { return strings.TrimRight(d.editor.Value(), "\n") }
+func (d *RoleEditorDialog) Value() string {
+	if d == nil {
+		return ""
+	}
+	return strings.TrimRight(d.editor.Value(), "\n")
+}
 
 func (d *RoleEditorDialog) Update(msg tea.KeyMsg) (*RoleEditorDialog, tea.Cmd) {
 	if !d.visible {

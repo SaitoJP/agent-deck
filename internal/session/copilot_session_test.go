@@ -381,3 +381,31 @@ func TestBuildCopilotCommand_Resume(t *testing.T) {
 		t.Errorf("expected command ending with %q, got %q", expected, cmd)
 	}
 }
+
+func TestBuildCopilotCommand_StripsEmbeddedCopilotFlags(t *testing.T) {
+	inst := &Instance{
+		Tool:            "copilot",
+		Command:         "copilot --allow-all --model claude-sonnet-4.6",
+		CopilotModel:    "gpt-5.4",
+		CopilotAllowAll: true,
+	}
+
+	cmd := buildCopilotCommand(inst)
+	if !strings.HasSuffix(cmd, "copilot --model gpt-5.4 --allow-all") {
+		t.Fatalf("expected normalized copilot command, got %q", cmd)
+	}
+}
+
+func TestBuildCopilotCommand_StripsEmbeddedNpxCopilotFlags(t *testing.T) {
+	inst := &Instance{
+		Tool:            "copilot",
+		Command:         "npx @github/copilot --model claude-sonnet-4.6",
+		CopilotModel:    "gpt-5.4",
+		CopilotAllowAll: true,
+	}
+
+	cmd := buildCopilotCommand(inst)
+	if !strings.HasSuffix(cmd, "npx @github/copilot --model gpt-5.4 --allow-all") {
+		t.Fatalf("expected normalized npx copilot command, got %q", cmd)
+	}
+}

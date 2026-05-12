@@ -218,6 +218,52 @@ func TestStorageSaveWithGroups_PersistsRoleInstructions(t *testing.T) {
 	}
 }
 
+func TestStorageSaveWithGroups_PersistsCopilotRuntimeFields(t *testing.T) {
+	s := newTestStorage(t)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	instances := []*Instance{
+		{
+			ID:                "copilot-1",
+			Title:             "Copilot Session",
+			ProjectPath:       "/tmp/copilot",
+			GroupPath:         "test-group",
+			Command:           "copilot",
+			Tool:              "copilot",
+			Status:            StatusIdle,
+			CreatedAt:         now,
+			CopilotSessionID:  "copilot-session-123",
+			CopilotDetectedAt: now,
+			CopilotModel:      "gpt-5.4",
+			CopilotAllowAll:   true,
+		},
+	}
+
+	if err := s.SaveWithGroups(instances, nil); err != nil {
+		t.Fatalf("SaveWithGroups failed: %v", err)
+	}
+
+	loaded, _, err := s.LoadWithGroups()
+	if err != nil {
+		t.Fatalf("LoadWithGroups failed: %v", err)
+	}
+	if len(loaded) != 1 {
+		t.Fatalf("expected 1 loaded instance, got %d", len(loaded))
+	}
+	if got := loaded[0].CopilotSessionID; got != "copilot-session-123" {
+		t.Fatalf("CopilotSessionID = %q, want %q", got, "copilot-session-123")
+	}
+	if got := loaded[0].CopilotModel; got != "gpt-5.4" {
+		t.Fatalf("CopilotModel = %q, want %q", got, "gpt-5.4")
+	}
+	if !loaded[0].CopilotAllowAll {
+		t.Fatal("CopilotAllowAll = false, want true")
+	}
+	if !loaded[0].CopilotDetectedAt.Equal(now) {
+		t.Fatalf("CopilotDetectedAt = %v, want %v", loaded[0].CopilotDetectedAt, now)
+	}
+}
+
 func TestStorageSaveWithGroups_DedupsClaudeSessionIDs(t *testing.T) {
 	s := newTestStorage(t)
 	now := time.Now()

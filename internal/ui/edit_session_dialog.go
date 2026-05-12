@@ -19,6 +19,8 @@ const (
 	editFieldCheckbox
 )
 
+const editFieldCopilotModel = "copilot-model"
+
 type editField struct {
 	key         string
 	label       string
@@ -42,6 +44,16 @@ type EditSessionDialog struct {
 	fields        []editField
 	focusIndex    int
 	validationErr string
+	seedState     editDialogState
+}
+
+type editDialogState struct {
+	title        string
+	tool         string
+	extraArgs    string
+	skip         bool
+	auto         bool
+	copilotModel string
 }
 
 func NewEditSessionDialog() *EditSessionDialog {
@@ -57,31 +69,14 @@ func (d *EditSessionDialog) Show(inst *session.Instance) {
 	d.groupName = displayGroupName(inst.GroupPath)
 	d.validationErr = ""
 	d.focusIndex = 0
-
-	tools, toolCursor := toolPillsForInstance(inst.Tool)
-
-	d.fields = []editField{
-		{key: session.FieldTitle, label: "Title", kind: editFieldText,
-			input: mkInput("Session title", MaxNameLength, inst.Title)},
-		{key: session.FieldTool, label: "Tool (restart)", kind: editFieldPills,
-			pillOptions: tools, pillCursor: toolCursor},
+	d.seedState = editDialogState{
+		title:        inst.Title,
+		tool:         inst.Tool,
+		extraArgs:    strings.Join(inst.ExtraArgs, " "),
+		copilotModel: readCopilotModel(inst),
 	}
-	if session.IsClaudeCompatible(inst.Tool) {
-		skip, auto := readClaudeFlags(inst)
-		d.fields = append(d.fields,
-			editField{key: session.FieldSkipPermissions,
-				label: "Skip permissions (restart, claude)", kind: editFieldCheckbox,
-				checked: skip},
-			editField{key: session.FieldAutoMode,
-				label: "Auto mode (restart, claude)", kind: editFieldCheckbox,
-				checked: auto},
-			editField{key: session.FieldExtraArgs,
-				label: "Extra args (restart, claude) — space-separated",
-				kind:  editFieldText,
-				input: mkInput("--model opus --verbose", 512, strings.Join(inst.ExtraArgs, " "))},
-		)
-	}
-	d.updateFocus()
+	d.seedState.skip, d.seedState.auto = readClaudeFlags(inst)
+	d.rebuildFields()
 }
 
 // readClaudeFlags returns the effective Skip/Auto state, mirroring
@@ -98,6 +93,96 @@ func readClaudeFlags(inst *session.Instance) (skip, auto bool) {
 		return false, false
 	}
 	return cfg.Claude.GetDangerousMode(), cfg.Claude.AutoMode
+}
+
+func readCopilotModel(inst *session.Instance) string {
+	if inst == nil {
+		return ""
+	}
+	if model := strings.TrimSpace(inst.CopilotModel); model != "" {
+		return model
+	}
+	if opts := inst.GetCopilotOptions(); opts != nil {
+		if model := strings.TrimSpace(opts.Model); model != "" {
+			return model
+		}
+	}
+	cfg, _ := session.LoadUserConfig()
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Copilot.DefaultModel)
+}
+
+func (d *EditSessionDialog) currentState() editDialogState {
+	state := d.seedState
+	for _, f := range d.fields {
+		switch f.key {
+		case session.FieldTitle:
+			state.title = f.input.Value()
+		case session.FieldTool:
+			if f.pillCursor >= 0 && f.pillCursor < len(f.pillOptions) {
+				state.tool = f.pillOptions[f.pillCursor]
+			}
+		case session.FieldSkipPermissions:
+			state.skip = f.checked
+		case session.FieldAutoMode:
+			state.auto = f.checked
+		case session.FieldExtraArgs:
+			state.extraArgs = f.input.Value()
+		case editFieldCopilotModel:
+			state.copilotModel = f.input.Value()
+		}
+	}
+	return state
+}
+
+func (d *EditSessionDialog) rebuildFields() {
+	state := d.currentState()
+	focusedKey := ""
+	if d.focusIndex >= 0 && d.focusIndex < len(d.fields) {
+		focusedKey = d.fields[d.focusIndex].key
+	}
+
+	tools, toolCursor := toolPillsForInstance(state.tool)
+	fields := []editField{
+		{key: session.FieldTitle, label: "Title", kind: editFieldText,
+			input: mkInput("Session title", MaxNameLength, state.title)},
+		{key: session.FieldTool, label: "Tool (restart)", kind: editFieldPills,
+			pillOptions: tools, pillCursor: toolCursor},
+	}
+	if session.IsClaudeCompatible(state.tool) {
+		fields = append(fields,
+			editField{key: session.FieldSkipPermissions,
+				label: "Skip permissions (restart, claude)", kind: editFieldCheckbox,
+				checked: state.skip},
+			editField{key: session.FieldAutoMode,
+				label: "Auto mode (restart, claude)", kind: editFieldCheckbox,
+				checked: state.auto},
+			editField{key: session.FieldExtraArgs,
+				label: "Extra args (restart, claude) — space-separated",
+				kind:  editFieldText,
+				input: mkInput("--model opus --verbose", 512, state.extraArgs)},
+		)
+	}
+	if state.tool == "copilot" {
+		fields = append(fields, editField{
+			key:   editFieldCopilotModel,
+			label: "Model (restart, copilot)",
+			kind:  editFieldText,
+			input: mkInput("claude-sonnet-4.6", 128, state.copilotModel),
+		})
+	}
+
+	d.fields = fields
+	d.focusIndex = 0
+	for i, f := range d.fields {
+		if f.key == focusedKey {
+			d.focusIndex = i
+			break
+		}
+	}
+	d.updateFocus()
 }
 
 // displayGroupName returns the human label for a group path. Mirrors
@@ -155,10 +240,25 @@ func (d *EditSessionDialog) IsVisible() bool {
 	return d.visible
 }
 
-func (d *EditSessionDialog) SessionID() string   { return d.sessionID }
-func (d *EditSessionDialog) SetSize(w, h int)    { d.width, d.height = w, h }
-func (d *EditSessionDialog) SetError(msg string) { d.validationErr = msg }
-func (d *EditSessionDialog) ClearError()         { d.validationErr = "" }
+func (d *EditSessionDialog) SessionID() string { return d.sessionID }
+func (d *EditSessionDialog) SetSize(w, h int) {
+	if d == nil {
+		return
+	}
+	d.width, d.height = w, h
+}
+func (d *EditSessionDialog) SetError(msg string) {
+	if d == nil {
+		return
+	}
+	d.validationErr = msg
+}
+func (d *EditSessionDialog) ClearError() {
+	if d == nil {
+		return
+	}
+	d.validationErr = ""
+}
 
 type Change struct {
 	Field  string
@@ -173,6 +273,9 @@ func (d *EditSessionDialog) GetChanges(inst *session.Instance) []Change {
 	var changes []Change
 	for _, f := range d.fields {
 		isLive := session.RestartPolicyFor(f.key) == session.FieldLive
+		if f.key == editFieldCopilotModel {
+			isLive = false
+		}
 		switch f.kind {
 		case editFieldText:
 			newVal := f.input.Value()
@@ -238,6 +341,8 @@ func fieldInitialValue(inst *session.Instance, field string) string {
 	case session.FieldAutoMode:
 		_, auto := readClaudeFlags(inst)
 		return strconv.FormatBool(auto)
+	case editFieldCopilotModel:
+		return readCopilotModel(inst)
 	}
 	return ""
 }
@@ -287,6 +392,9 @@ func (d *EditSessionDialog) Update(msg tea.Msg) (*EditSessionDialog, tea.Cmd) {
 			if f.pillCursor < 0 {
 				f.pillCursor = len(f.pillOptions) - 1
 			}
+			if f.key == session.FieldTool {
+				d.rebuildFields()
+			}
 			return d, nil
 		}
 
@@ -294,6 +402,9 @@ func (d *EditSessionDialog) Update(msg tea.Msg) (*EditSessionDialog, tea.Cmd) {
 		if d.isPillsFocused() {
 			f := &d.fields[d.focusIndex]
 			f.pillCursor = (f.pillCursor + 1) % len(f.pillOptions)
+			if f.key == session.FieldTool {
+				d.rebuildFields()
+			}
 			return d, nil
 		}
 

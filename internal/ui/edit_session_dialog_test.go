@@ -21,6 +21,17 @@ func sampleInstance() *session.Instance {
 	}
 }
 
+func sampleCopilotInstance() *session.Instance {
+	return &session.Instance{
+		ID:           "sess-copilot-1",
+		Title:        "copilot-session",
+		Tool:         "copilot",
+		Command:      "copilot",
+		GroupPath:    "projects/devops",
+		CopilotModel: "claude-sonnet-4.6",
+	}
+}
+
 func TestEditSessionDialog_InitiallyHidden(t *testing.T) {
 	d := NewEditSessionDialog()
 	if d == nil {
@@ -52,6 +63,22 @@ func TestEditSessionDialog_ShowPopulatesFromInstance(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Errorf("View() should contain %q; got:\n%s", want, view)
 		}
+	}
+}
+
+func TestEditSessionDialog_ShowPopulatesCopilotModel(t *testing.T) {
+	d := NewEditSessionDialog()
+	inst := sampleCopilotInstance()
+	d.Show(inst)
+
+	view := d.View()
+	for _, want := range []string{"copilot-session", "Model (restart, copilot)", "claude-sonnet-4.6"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("View() should contain %q; got:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "Extra args") {
+		t.Errorf("copilot session should not render claude-only fields; got:\n%s", view)
 	}
 }
 
@@ -251,6 +278,56 @@ func TestEditSessionDialog_GetChanges_DetectsPillsToolSwitch(t *testing.T) {
 	c := changes[0]
 	if c.Field != session.FieldTool || c.Value != "gemini" || c.IsLive {
 		t.Errorf("got %+v, want Field=tool Value=gemini IsLive=false (restart-required)", c)
+	}
+}
+
+func TestEditSessionDialog_SwitchingToolToCopilotShowsModelField(t *testing.T) {
+	d := NewEditSessionDialog()
+	inst := sampleInstance()
+	d.Show(inst)
+
+	toolIdx := -1
+	for i, f := range d.fields {
+		if f.key == session.FieldTool {
+			toolIdx = i
+			break
+		}
+	}
+	if toolIdx < 0 {
+		t.Fatal("expected Tool field present")
+	}
+	d.focusIndex = toolIdx
+	d.updateFocus()
+
+	for d.fields[toolIdx].pillOptions[d.fields[toolIdx].pillCursor] != "copilot" {
+		d, _ = d.Update(tea.KeyMsg{Type: tea.KeyRight})
+	}
+
+	view := d.View()
+	if !strings.Contains(view, "Model (restart, copilot)") {
+		t.Fatalf("switching tool to copilot should show model field; got:\n%s", view)
+	}
+}
+
+func TestEditSessionDialog_GetChanges_DetectsCopilotModelEdit(t *testing.T) {
+	d := NewEditSessionDialog()
+	inst := sampleCopilotInstance()
+	d.Show(inst)
+
+	for i := range d.fields {
+		if d.fields[i].key == editFieldCopilotModel {
+			d.fields[i].input.SetValue("gpt-5.4")
+			break
+		}
+	}
+
+	changes := d.GetChanges(inst)
+	if len(changes) != 1 {
+		t.Fatalf("got %d changes, want 1: %v", len(changes), changes)
+	}
+	c := changes[0]
+	if c.Field != editFieldCopilotModel || c.Value != "gpt-5.4" || c.IsLive {
+		t.Errorf("got %+v, want Field=%s Value=gpt-5.4 IsLive=false", c, editFieldCopilotModel)
 	}
 }
 

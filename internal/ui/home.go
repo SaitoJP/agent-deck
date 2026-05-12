@@ -7396,7 +7396,18 @@ func (h *Home) handleEditSessionDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Skip toggle in the same submit fails IsClaudeCompatible on
 		// the toggle.
 		orderedChanges := make([]Change, 0, len(changes))
+		copilotModelValue := ""
+		hasCopilotModelChange := false
+		toolChangedToCopilot := false
 		for _, c := range changes {
+			if c.Field == editFieldCopilotModel {
+				copilotModelValue = c.Value
+				hasCopilotModelChange = true
+				continue
+			}
+			if c.Field == session.FieldTool && c.Value == "copilot" {
+				toolChangedToCopilot = true
+			}
 			if c.Field != session.FieldTool {
 				orderedChanges = append(orderedChanges, c)
 			}
@@ -7426,6 +7437,49 @@ func (h *Home) handleEditSessionDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			if !c.IsLive {
 				hadRestartRequired = true
+			}
+		}
+		if inst.Tool == "copilot" && (hasCopilotModelChange || toolChangedToCopilot) {
+			inst.Command = "copilot"
+		}
+		if inst.Tool == "copilot" && hasCopilotModelChange {
+			opts := inst.GetCopilotOptions()
+			if opts == nil {
+				opts = &session.CopilotOptions{
+					SessionMode: "new",
+					AllowAll:    inst.CopilotAllowAll,
+				}
+			}
+			if opts.SessionMode == "" {
+				opts.SessionMode = "new"
+			}
+			opts.Model = strings.TrimSpace(copilotModelValue)
+			if err := inst.SetCopilotOptions(opts); err != nil {
+				h.instancesMu.Unlock()
+				h.editSessionDialog.SetError(err.Error())
+				return h, nil
+			}
+			inst.CopilotModel = opts.Model
+			// Copilot keeps the model on the conversation, so changing it must
+			// drop the bound session ID and restart fresh instead of resuming the
+			// previous conversation.
+			inst.CopilotSessionID = ""
+			inst.CopilotDetectedAt = time.Time{}
+			inst.CopilotStartedAt = 0
+			hadRestartRequired = true
+		}
+		if inst.Tool != "copilot" {
+			inst.CopilotSessionID = ""
+			inst.CopilotDetectedAt = time.Time{}
+			inst.CopilotStartedAt = 0
+			inst.CopilotModel = ""
+			inst.CopilotAllowAll = false
+			if opts := inst.GetCopilotOptions(); opts != nil {
+				if err := inst.SetCopilotOptions(nil); err != nil {
+					h.instancesMu.Unlock()
+					h.editSessionDialog.SetError(err.Error())
+					return h, nil
+				}
 			}
 		}
 		h.instancesMu.Unlock()

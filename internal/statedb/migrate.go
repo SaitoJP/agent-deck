@@ -42,6 +42,11 @@ type jsonInstanceData struct {
 	GeminiYoloMode   *bool     `json:"gemini_yolo_mode,omitempty"`
 	GeminiModel      string    `json:"gemini_model,omitempty"`
 
+	CopilotSessionID  string    `json:"copilot_session_id,omitempty"`
+	CopilotDetectedAt time.Time `json:"copilot_detected_at,omitempty"`
+	CopilotModel      string    `json:"copilot_model,omitempty"`
+	CopilotAllowAll   bool      `json:"copilot_allow_all,omitempty"`
+
 	OpenCodeSessionID  string    `json:"opencode_session_id,omitempty"`
 	OpenCodeDetectedAt time.Time `json:"opencode_detected_at,omitempty"`
 
@@ -76,6 +81,10 @@ type toolDataBlob struct {
 	GeminiDetectedAt   int64           `json:"gemini_detected_at,omitempty"`
 	GeminiYoloMode     *bool           `json:"gemini_yolo_mode,omitempty"`
 	GeminiModel        string          `json:"gemini_model,omitempty"`
+	CopilotSessionID   string          `json:"copilot_session_id,omitempty"`
+	CopilotDetectedAt  int64           `json:"copilot_detected_at,omitempty"`
+	CopilotModel       string          `json:"copilot_model,omitempty"`
+	CopilotAllowAll    bool            `json:"copilot_allow_all,omitempty"`
 	OpenCodeSessionID  string          `json:"opencode_session_id,omitempty"`
 	OpenCodeDetectedAt int64           `json:"opencode_detected_at,omitempty"`
 	CodexSessionID     string          `json:"codex_session_id,omitempty"`
@@ -129,6 +138,9 @@ func MigrateFromJSON(jsonPath string, db *StateDB) (int, int, error) {
 			GeminiSessionID:   inst.GeminiSessionID,
 			GeminiYoloMode:    inst.GeminiYoloMode,
 			GeminiModel:       inst.GeminiModel,
+			CopilotSessionID:  inst.CopilotSessionID,
+			CopilotModel:      inst.CopilotModel,
+			CopilotAllowAll:   inst.CopilotAllowAll,
 			OpenCodeSessionID: inst.OpenCodeSessionID,
 			CodexSessionID:    inst.CodexSessionID,
 			LatestPrompt:      inst.LatestPrompt,
@@ -144,6 +156,9 @@ func MigrateFromJSON(jsonPath string, db *StateDB) (int, int, error) {
 		}
 		if !inst.GeminiDetectedAt.IsZero() {
 			td.GeminiDetectedAt = inst.GeminiDetectedAt.Unix()
+		}
+		if !inst.CopilotDetectedAt.IsZero() {
+			td.CopilotDetectedAt = inst.CopilotDetectedAt.Unix()
 		}
 		if !inst.OpenCodeDetectedAt.IsZero() {
 			td.OpenCodeDetectedAt = inst.OpenCodeDetectedAt.Unix()
@@ -217,6 +232,7 @@ func MarshalToolData(
 	claudeSessionID string, claudeDetectedAt time.Time,
 	geminiSessionID string, geminiDetectedAt time.Time,
 	geminiYoloMode *bool, geminiModel string,
+	copilotSessionID string, copilotDetectedAt time.Time, copilotModel string, copilotAllowAll bool,
 	openCodeSessionID string, openCodeDetectedAt time.Time,
 	codexSessionID string, codexDetectedAt time.Time,
 	latestPrompt string, notes string, roleInstructions string, loadedMCPNames []string,
@@ -234,6 +250,9 @@ func MarshalToolData(
 		GeminiSessionID:   geminiSessionID,
 		GeminiYoloMode:    geminiYoloMode,
 		GeminiModel:       geminiModel,
+		CopilotSessionID:  copilotSessionID,
+		CopilotModel:      copilotModel,
+		CopilotAllowAll:   copilotAllowAll,
 		OpenCodeSessionID: openCodeSessionID,
 		CodexSessionID:    codexSessionID,
 		LatestPrompt:      latestPrompt,
@@ -261,6 +280,9 @@ func MarshalToolData(
 	if !geminiDetectedAt.IsZero() {
 		td.GeminiDetectedAt = geminiDetectedAt.Unix()
 	}
+	if !copilotDetectedAt.IsZero() {
+		td.CopilotDetectedAt = copilotDetectedAt.Unix()
+	}
 	if !openCodeDetectedAt.IsZero() {
 		td.OpenCodeDetectedAt = openCodeDetectedAt.Unix()
 	}
@@ -277,6 +299,7 @@ func UnmarshalToolData(data json.RawMessage) (
 	claudeSessionID string, claudeDetectedAt time.Time,
 	geminiSessionID string, geminiDetectedAt time.Time,
 	geminiYoloMode *bool, geminiModel string,
+	copilotSessionID string, copilotDetectedAt time.Time, copilotModel string, copilotAllowAll bool,
 	openCodeSessionID string, openCodeDetectedAt time.Time,
 	codexSessionID string, codexDetectedAt time.Time,
 	latestPrompt string, notes string, roleInstructions string, loadedMCPNames []string,
@@ -307,6 +330,12 @@ func UnmarshalToolData(data json.RawMessage) (
 	}
 	geminiYoloMode = td.GeminiYoloMode
 	geminiModel = td.GeminiModel
+	copilotSessionID = td.CopilotSessionID
+	if td.CopilotDetectedAt > 0 {
+		copilotDetectedAt = time.Unix(td.CopilotDetectedAt, 0)
+	}
+	copilotModel = td.CopilotModel
+	copilotAllowAll = td.CopilotAllowAll
 	openCodeSessionID = td.OpenCodeSessionID
 	if td.OpenCodeDetectedAt > 0 {
 		openCodeDetectedAt = time.Unix(td.OpenCodeDetectedAt, 0)

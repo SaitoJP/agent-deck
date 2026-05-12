@@ -72,6 +72,12 @@ type InstanceData struct {
 	GeminiYoloMode   *bool     `json:"gemini_yolo_mode,omitempty"`
 	GeminiModel      string    `json:"gemini_model,omitempty"`
 
+	// Copilot session (persisted for resume after app restart)
+	CopilotSessionID  string    `json:"copilot_session_id,omitempty"`
+	CopilotDetectedAt time.Time `json:"copilot_detected_at,omitempty"`
+	CopilotModel      string    `json:"copilot_model,omitempty"`
+	CopilotAllowAll   bool      `json:"copilot_allow_all,omitempty"`
+
 	// OpenCode session (persisted for resume after app restart)
 	OpenCodeSessionID  string    `json:"opencode_session_id,omitempty"`
 	OpenCodeDetectedAt time.Time `json:"opencode_detected_at,omitempty"`
@@ -323,6 +329,7 @@ func (s *Storage) SaveWithGroups(instances []*Instance, groupTree *GroupTree) er
 			inst.ClaudeSessionID, inst.ClaudeDetectedAt,
 			inst.GeminiSessionID, inst.GeminiDetectedAt,
 			inst.GeminiYoloMode, inst.GeminiModel,
+			inst.CopilotSessionID, inst.CopilotDetectedAt, inst.CopilotModel, inst.CopilotAllowAll,
 			inst.OpenCodeSessionID, inst.OpenCodeDetectedAt,
 			inst.CodexSessionID, inst.CodexDetectedAt,
 			inst.LatestPrompt, inst.Notes, inst.RoleInstructions, inst.LoadedMCPNames,
@@ -474,6 +481,7 @@ func (s *Storage) LoadLite() ([]*InstanceData, []*GroupData, error) {
 		claudeSID, claudeAt,
 			geminiSID, geminiAt,
 			geminiYolo, geminiModel,
+			copilotSID, copilotAt, copilotModel, copilotAllowAll,
 			opencodeSID, opencodeAt,
 			codexSID, codexAt,
 			latestPrompt, notes, roleInstructions, loadedMCPs,
@@ -514,6 +522,10 @@ func (s *Storage) LoadLite() ([]*InstanceData, []*GroupData, error) {
 			GeminiDetectedAt:   geminiAt,
 			GeminiYoloMode:     geminiYolo,
 			GeminiModel:        geminiModel,
+			CopilotSessionID:   copilotSID,
+			CopilotDetectedAt:  copilotAt,
+			CopilotModel:       copilotModel,
+			CopilotAllowAll:    copilotAllowAll,
 			OpenCodeSessionID:  opencodeSID,
 			OpenCodeDetectedAt: opencodeAt,
 			CodexSessionID:     codexSID,
@@ -581,6 +593,7 @@ func (s *Storage) LoadWithGroups() ([]*Instance, []*GroupData, error) {
 		claudeSID, claudeAt,
 			geminiSID, geminiAt,
 			geminiYolo, geminiModel,
+			copilotSID, copilotAt, copilotModel, copilotAllowAll,
 			opencodeSID, opencodeAt,
 			codexSID, codexAt,
 			latestPrompt, notes, roleInstructions, loadedMCPs,
@@ -621,6 +634,10 @@ func (s *Storage) LoadWithGroups() ([]*Instance, []*GroupData, error) {
 			GeminiDetectedAt:   geminiAt,
 			GeminiYoloMode:     geminiYolo,
 			GeminiModel:        geminiModel,
+			CopilotSessionID:   copilotSID,
+			CopilotDetectedAt:  copilotAt,
+			CopilotModel:       copilotModel,
+			CopilotAllowAll:    copilotAllowAll,
 			OpenCodeSessionID:  opencodeSID,
 			OpenCodeDetectedAt: opencodeAt,
 			CodexSessionID:     codexSID,
@@ -866,6 +883,10 @@ func (s *Storage) convertToInstances(data *StorageData) ([]*Instance, []*GroupDa
 			GeminiDetectedAt:   instData.GeminiDetectedAt,
 			GeminiYoloMode:     instData.GeminiYoloMode,
 			GeminiModel:        instData.GeminiModel,
+			CopilotSessionID:   instData.CopilotSessionID,
+			CopilotDetectedAt:  instData.CopilotDetectedAt,
+			CopilotModel:       instData.CopilotModel,
+			CopilotAllowAll:    instData.CopilotAllowAll,
 			OpenCodeSessionID:  instData.OpenCodeSessionID,
 			OpenCodeDetectedAt: instData.OpenCodeDetectedAt,
 			CodexSessionID:     instData.CodexSessionID,
