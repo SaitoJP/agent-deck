@@ -16,13 +16,19 @@ func TestMapEventToStatus(t *testing.T) {
 		expect string
 	}{
 		{"SessionStart", "waiting"},
+		{"sessionStart", "waiting"},
 		{"BeforeAgent", "running"},
 		{"AfterAgent", "waiting"},
 		{"UserPromptSubmit", "running"},
+		{"userPromptSubmitted", "running"},
 		{"Stop", "waiting"},
+		{"agentStop", "waiting"},
 		{"PermissionRequest", "waiting"},
+		{"permissionRequest", "waiting"},
 		{"Notification", ""},
+		{"notification", ""},
 		{"SessionEnd", "dead"},
+		{"sessionEnd", "dead"},
 		{"PreCompact", ""},
 		{"UnknownEvent", ""},
 	}
@@ -166,6 +172,25 @@ func TestHookPayload_Unmarshal(t *testing.T) {
 				t.Errorf("SessionID = %q, want %q", p.SessionID, tt.session)
 			}
 		})
+	}
+}
+
+func TestHookPayload_Unmarshal_CopilotNotificationType(t *testing.T) {
+	var p hookPayload
+	if err := json.Unmarshal([]byte(`{"hook_event_name":"Notification","session_id":"sess-1","notification_type":"permission_prompt"}`), &p); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+	if p.NotificationType != "permission_prompt" {
+		t.Fatalf("NotificationType = %q, want permission_prompt", p.NotificationType)
+	}
+}
+
+func TestMapEventToStatus_NormalizesCopilotAliases(t *testing.T) {
+	if got := mapEventToStatus("agentStop"); got != "waiting" {
+		t.Fatalf("mapEventToStatus(agentStop) = %q, want waiting", got)
+	}
+	if got := mapEventToStatus("permissionRequest"); got != "waiting" {
+		t.Fatalf("mapEventToStatus(permissionRequest) = %q, want waiting", got)
 	}
 }
 

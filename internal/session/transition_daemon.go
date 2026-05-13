@@ -107,7 +107,7 @@ func (d *TransitionDaemon) syncProfile(profile string) time.Duration {
 	hookCandidates := make(map[string]hookTransitionCandidate, len(instances))
 	for _, inst := range instances {
 		byID[inst.ID] = inst
-		if IsClaudeCompatible(inst.Tool) || inst.Tool == "codex" || inst.Tool == "gemini" {
+		if IsClaudeCompatible(inst.Tool) || inst.Tool == "codex" || inst.Tool == "gemini" || inst.Tool == "copilot" {
 			if hs := d.hookStatusForInstance(inst.ID); hs != nil {
 				inst.UpdateHookStatus(hs)
 				if candidate, ok := terminalHookTransitionCandidate(inst.Tool, hs); ok {
@@ -394,11 +394,15 @@ func terminalHookTransitionCandidate(tool string, hs *HookStatus) (hookTransitio
 		return hookTransitionCandidate{}, false
 	}
 
-	event := strings.ToLower(strings.TrimSpace(hs.Event))
+	event := NormalizeHookEventName(hs.Event)
 	switch strings.ToLower(strings.TrimSpace(tool)) {
 	case "claude":
 		// SessionStart is intentionally excluded (initial prompt isn't task completion).
-		if event == "stop" || event == "permissionrequest" || event == "notification" {
+		if IsTerminalPromptHookEvent(event) {
+			return hookTransitionCandidate{ToStatus: to, Timestamp: hs.UpdatedAt}, true
+		}
+	case "copilot":
+		if IsTerminalPromptHookEvent(event) {
 			return hookTransitionCandidate{ToStatus: to, Timestamp: hs.UpdatedAt}, true
 		}
 	case "codex":

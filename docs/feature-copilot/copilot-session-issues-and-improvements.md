@@ -87,7 +87,7 @@ agent-deck session send my-copilot-session "do something"
 # コマンド自体は成功するが、Copilot 側には届かない
 ```
 
-**原因**: Copilot CLI には ACP（Agent Communication Protocol）統合がなく、agent-deck でも Claude / Codex / Gemini のような hook ベースの lifecycle tracking（activity 検出、session-id 取得、`--resume` など）が未実装。
+**原因**: Copilot CLI には ACP（Agent Communication Protocol）統合がなく、当時の agent-deck でも Claude / Codex / Gemini のような hook ベースの lifecycle tracking（activity 検出、session-id 取得、`--resume` など）が未実装だった。
 
 **回避策**: `tmux send-keys` で Copilot の TUI に直接キー入力する。
 
@@ -95,7 +95,7 @@ agent-deck session send my-copilot-session "do something"
 tmux send-keys -t <tmux_session_name> "your message here" Enter
 ```
 
-**改善案**: Copilot 用の hook 統合を実装するか、少なくとも stdin 経由の注入をサポートする。
+**追記 (2026-05-13)**: 最新の agent-deck では Copilot CLI hooks を使った lifecycle tracking が入り、`Stop` などの完了系イベントは status/transition 検知に流れるようになった。`session send` 自体の stdin/ACP 問題は別件として残る。
 
 ---
 

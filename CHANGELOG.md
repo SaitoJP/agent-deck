@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Conductor now supports GitHub Copilot CLI via `conductor setup --agent copilot`, including Copilot-specific `--model` / `--allow-all` options, conductor-level `[copilot]` defaults, and `CLAUDE.md` bootstrap instructions for fresh Copilot conductor sessions.
 
+### Fixed
+
+- Copilot child sessions now install official Copilot CLI hooks and feed `SessionStart` / `UserPromptSubmit` / `Stop` / `PermissionRequest` / `Notification` / `SessionEnd` into agent-deck's hook sidecar path, so fast Copilot turn completions are no longer missed by `notify-daemon` when conductor parenting depends on transition delivery.
+
 ## [1.9.0] - 2026-05-11
 
 Stability + cascade-prevention release. Closes the v1.8 flicker / silent-drop / panic-cascade bug class and the 2026-05-08 conductor-OOM cascade. Seven themed bundles from the V1.9 priority plan land here; remaining T2 / T5 / T7 longer-tail items follow in v1.9.x patches.

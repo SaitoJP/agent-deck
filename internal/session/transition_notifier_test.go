@@ -143,6 +143,36 @@ func TestTerminalHookTransitionCandidate(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "copilot stop terminal",
+			tool: "copilot",
+			hs: &HookStatus{
+				Status:    "waiting",
+				Event:     "Stop",
+				UpdatedAt: now,
+			},
+			want: true,
+		},
+		{
+			name: "copilot agentStop terminal",
+			tool: "copilot",
+			hs: &HookStatus{
+				Status:    "waiting",
+				Event:     "agentStop",
+				UpdatedAt: now,
+			},
+			want: true,
+		},
+		{
+			name: "copilot notification terminal",
+			tool: "copilot",
+			hs: &HookStatus{
+				Status:    "waiting",
+				Event:     "Notification",
+				UpdatedAt: now,
+			},
+			want: true,
+		},
+		{
 			name: "codex turn complete terminal",
 			tool: "codex",
 			hs: &HookStatus{
@@ -181,6 +211,21 @@ func TestTerminalHookTransitionCandidate(t *testing.T) {
 				t.Fatalf("terminalHookTransitionCandidate(%q, %+v) = %v, want %v", tt.tool, tt.hs, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeHookEventName(t *testing.T) {
+	tests := map[string]string{
+		"agentStop":           "Stop",
+		"permissionRequest":   "PermissionRequest",
+		"notification":        "Notification",
+		"userPromptSubmitted": "UserPromptSubmit",
+		"sessionEnd":          "SessionEnd",
+	}
+	for in, want := range tests {
+		if got := NormalizeHookEventName(in); got != want {
+			t.Fatalf("NormalizeHookEventName(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
@@ -344,5 +389,75 @@ func TestInstanceNoTransitionNotifyJSONRoundTrip(t *testing.T) {
 	}
 	if !decoded.NoTransitionNotify {
 		t.Fatal("NoTransitionNotify should be true after round-trip")
+	}
+}
+
+func TestEmitHookTransitionCandidates_CopilotStopDispatches(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("AGENT_DECK_HOME", "")
+	t.Setenv("AGENT_DECK_PROFILE", "")
+	ClearUserConfigCache()
+	t.Cleanup(ClearUserConfigCache)
+
+	profile := "_test-copilot-stop"
+	storage, err := NewStorageWithProfile(profile)
+	if err != nil {
+		t.Fatalf("NewStorageWithProfile: %v", err)
+	}
+	now := time.Now()
+	child := &Instance{
+		ID:              "child-1",
+		Title:           "worker",
+		ProjectPath:     "/tmp/child",
+		GroupPath:       DefaultGroupPath,
+		ParentSessionID: "parent-1",
+		Tool:            "copilot",
+		Status:          StatusRunning,
+		CreatedAt:       now,
+	}
+	parent := &Instance{
+		ID:          "parent-1",
+		Title:       "orchestrator",
+		ProjectPath: "/tmp/parent",
+		GroupPath:   DefaultGroupPath,
+		Tool:        "shell",
+		Status:      StatusWaiting,
+		CreatedAt:   now,
+	}
+	if err := storage.SaveWithGroups([]*Instance{child, parent}, nil); err != nil {
+		t.Fatalf("SaveWithGroups: %v", err)
+	}
+
+	notifier := NewTransitionNotifier()
+	defer notifier.Close()
+	gotSend := make(chan string, 1)
+	notifier.sender = func(profile, sessionID, message string) error {
+		gotSend <- sessionID + ":" + message
+		return nil
+	}
+
+	daemon := &TransitionDaemon{notifier: notifier}
+	daemon.emitHookTransitionCandidates(
+		profile,
+		map[string]*Instance{"child-1": child, "parent-1": parent},
+		nil,
+		map[string]string{"child-1": "waiting", "parent-1": "waiting"},
+		map[string]hookTransitionCandidate{
+			"child-1": {ToStatus: "waiting", Timestamp: now},
+		},
+	)
+	notifier.waitWatchers()
+
+	select {
+	case sent := <-gotSend:
+		if !strings.HasPrefix(sent, "parent-1:") {
+			t.Fatalf("dispatch target = %q, want parent-1", sent)
+		}
+		if !strings.Contains(sent, "Child 'worker' (child-1) is waiting.") {
+			t.Fatalf("dispatch message = %q, want child waiting notification", sent)
+		}
+	default:
+		t.Fatal("expected Copilot Stop hook candidate to dispatch a parent notification")
 	}
 }

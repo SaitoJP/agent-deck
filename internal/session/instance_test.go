@@ -3202,6 +3202,43 @@ func TestInstance_UpdateHookStatus_UsesAnchorWhenHookSessionIDMissing_Codex(t *t
 	}
 }
 
+func TestInstance_UpdateHookStatus_UsesAnchorWhenHookSessionIDMissing_Copilot(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("COPILOT_HOME", t.TempDir())
+	t.Setenv("COPILOT_CONFIG_DIR", "")
+
+	inst := NewInstanceWithTool("hook-anchor-copilot", "/tmp/test", "copilot")
+	WriteHookSessionAnchor(inst.ID, "anchor-copilot-1")
+
+	hookStatus := &HookStatus{
+		Status:    "waiting",
+		SessionID: "",
+		Event:     "Stop",
+		UpdatedAt: time.Now(),
+	}
+	inst.UpdateHookStatus(hookStatus)
+
+	if inst.CopilotSessionID != "anchor-copilot-1" {
+		t.Fatalf("CopilotSessionID = %q, want anchor-copilot-1", inst.CopilotSessionID)
+	}
+}
+
+func TestInstance_UpdateHookStatus_PermissionRequestAliasResetsAcknowledged(t *testing.T) {
+	inst := NewInstanceWithTool("hook-permission-alias", "/tmp/test", "copilot")
+	inst.tmuxSession.Acknowledge()
+
+	inst.UpdateHookStatus(&HookStatus{
+		Status:    "waiting",
+		SessionID: "copilot-sess-1",
+		Event:     "permissionRequest",
+		UpdatedAt: time.Now(),
+	})
+
+	if inst.tmuxSession.IsAcknowledged() {
+		t.Fatal("permissionRequest alias should reset acknowledged state")
+	}
+}
+
 func TestInstance_UpdateHookStatus_GeminiRejectsCandidateWithoutConversationData(t *testing.T) {
 	tmpDir := t.TempDir()
 	geminiConfigDirOverride = tmpDir

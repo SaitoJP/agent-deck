@@ -27,10 +27,11 @@ var validInstanceID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 // hookPayload represents the JSON payload Claude Code sends to hooks via stdin.
 // Only the fields we need are decoded; unknown fields are ignored.
 type hookPayload struct {
-	HookEventName string          `json:"hook_event_name"`
-	SessionID     string          `json:"session_id"`
-	Source        string          `json:"source"`
-	Matcher       json.RawMessage `json:"matcher,omitempty"`
+	HookEventName    string          `json:"hook_event_name"`
+	SessionID        string          `json:"session_id"`
+	Source           string          `json:"source"`
+	Matcher          json.RawMessage `json:"matcher,omitempty"`
+	NotificationType string          `json:"notification_type,omitempty"`
 }
 
 // hookStatusFile is the JSON written to ~/.agent-deck/hooks/{instance_id}.json
@@ -51,7 +52,7 @@ type hookStatusFile struct {
 //   - "BeforeAgent" = running
 //   - "AfterAgent"  = waiting
 func mapEventToStatus(event string) string {
-	switch event {
+	switch session.NormalizeHookEventName(event) {
 	case "SessionStart":
 		return "waiting" // Claude at initial prompt, waiting for user input
 	case "BeforeAgent":
@@ -106,6 +107,7 @@ func handleHookHandler() {
 	}
 
 	// Map event to status
+	payload.HookEventName = session.NormalizeHookEventName(payload.HookEventName)
 	status := mapEventToStatus(payload.HookEventName)
 
 	// Special handling for Notification events: only map to "waiting" if
@@ -117,6 +119,10 @@ func handleHookHandler() {
 				status = "waiting"
 			}
 		}
+	}
+	if payload.HookEventName == "Notification" &&
+		(payload.NotificationType == "permission_prompt" || payload.NotificationType == "elicitation_dialog") {
+		status = "waiting"
 	}
 
 	if status == "" {

@@ -2343,6 +2343,7 @@ func (i *Instance) Start() error {
 	case i.Tool == "gemini":
 		command = i.buildGeminiCommand(i.Command)
 	case i.Tool == "copilot":
+		ensureCopilotHooksInstalled()
 		command = buildCopilotCommand(i)
 		// Record start time for session ID detection (Unix millis)
 		i.CopilotStartedAt = time.Now().UnixMilli()
@@ -2531,6 +2532,7 @@ func (i *Instance) StartWithMessage(message string) error {
 	case i.Tool == "gemini":
 		command = i.buildGeminiCommand(i.Command)
 	case i.Tool == "copilot":
+		ensureCopilotHooksInstalled()
 		command = buildCopilotCommand(i)
 		i.CopilotStartedAt = time.Now().UnixMilli()
 	case i.Tool == "opencode":
@@ -2895,7 +2897,7 @@ func (i *Instance) UpdateStatus() error {
 
 	// COLD LOAD: CLI doesn't run StatusFileWatcher, so hookStatus is always empty.
 	// Read the hook file from disk once to give CLI the same fast path as the TUI.
-	if i.hookStatus == "" && (IsClaudeCompatible(i.Tool) || i.Tool == "codex" || i.Tool == "gemini") {
+	if i.hookStatus == "" && (IsClaudeCompatible(i.Tool) || i.Tool == "codex" || i.Tool == "gemini" || i.Tool == "copilot") {
 		if hs := readHookStatusFile(i.ID); hs != nil {
 			i.hookStatus = hs.Status
 			i.hookEvent = hs.Event
@@ -2914,7 +2916,7 @@ func (i *Instance) UpdateStatus() error {
 	// Freshness is tool- and state-specific (e.g. Codex running vs waiting).
 	// When this path is stale/missing, control naturally falls through to tmux
 	// polling and tool-specific session sync (tmux env/process-files/disk).
-	if (IsClaudeCompatible(i.Tool) || IsCodexCompatible(i.Tool) || i.Tool == "gemini") &&
+	if (IsClaudeCompatible(i.Tool) || IsCodexCompatible(i.Tool) || i.Tool == "gemini" || i.Tool == "copilot") &&
 		i.hookStatus != "" &&
 		time.Since(i.hookLastUpdate) < hookFastPathFreshnessForTool(i.Tool, i.hookStatus) {
 		switch i.hookStatus {
@@ -2965,6 +2967,11 @@ func (i *Instance) UpdateStatus() error {
 				if i.hookSessionID != i.GeminiSessionID {
 					i.GeminiSessionID = i.hookSessionID
 					i.GeminiDetectedAt = time.Now()
+				}
+			case i.Tool == "copilot":
+				if i.hookSessionID != i.CopilotSessionID {
+					i.CopilotSessionID = i.hookSessionID
+					i.CopilotDetectedAt = time.Now()
 				}
 			}
 		}
@@ -3180,7 +3187,7 @@ func (i *Instance) UpdateHookStatus(status *HookStatus) {
 	// can stay grey if already seen.
 	// Handles both PermissionRequest events and Notification/permission_prompt.
 	if isNewEvent && status.Status == "waiting" && i.tmuxSession != nil {
-		if status.Event == "PermissionRequest" || status.Event == "Notification" {
+		if IsPermissionLikeHookEvent(status.Event) {
 			i.tmuxSession.ResetAcknowledged()
 		}
 	}
@@ -3287,6 +3294,22 @@ func (i *Instance) UpdateHookStatus(status *HookStatus) {
 			if i.tmuxSession != nil && i.tmuxSession.Exists() {
 				_ = i.tmuxSession.SetEnvironment("GEMINI_SESSION_ID", sessionID)
 			}
+		}
+	case i.Tool == "copilot":
+		if sessionID == i.CopilotSessionID {
+			return
+		}
+		sessionLog.Debug("copilot_session_update_from_hook",
+			slog.String("old_id", i.CopilotSessionID),
+			slog.String("new_id", sessionID),
+			slog.String("event", status.Event),
+		)
+		i.CopilotSessionID = sessionID
+		i.CopilotDetectedAt = time.Now()
+		i.hookSessionID = sessionID
+
+		if i.tmuxSession != nil && i.tmuxSession.Exists() {
+			_ = i.tmuxSession.SetEnvironment("COPILOT_SESSION_ID", sessionID)
 		}
 	}
 }
@@ -4595,6 +4618,7 @@ func (i *Instance) Restart() error {
 		if i.CopilotSessionID == "" {
 			i.CopilotStartedAt = time.Now().UnixMilli()
 		}
+		ensureCopilotHooksInstalled()
 		resumeCmd, containerName, err := i.prepareCommand(buildCopilotCommand(i))
 		if err != nil {
 			return err
@@ -4810,6 +4834,7 @@ func (i *Instance) Restart() error {
 		case i.Tool == "gemini":
 			command = i.buildGeminiCommand(i.Command)
 		case i.Tool == "copilot":
+			ensureCopilotHooksInstalled()
 			command = buildCopilotCommand(i)
 			if i.CopilotSessionID == "" {
 				i.CopilotStartedAt = time.Now().UnixMilli()

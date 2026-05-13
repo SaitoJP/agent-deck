@@ -14,8 +14,11 @@ import (
 )
 
 // getCopilotHomeDir returns the Copilot CLI config/state directory.
-// Respects COPILOT_CONFIG_DIR env var, falling back to ~/.copilot.
+// Respects COPILOT_HOME first, then legacy COPILOT_CONFIG_DIR, falling back to ~/.copilot.
 func getCopilotHomeDir() string {
+	if dir := strings.TrimSpace(os.Getenv("COPILOT_HOME")); dir != "" {
+		return dir
+	}
 	if dir := strings.TrimSpace(os.Getenv("COPILOT_CONFIG_DIR")); dir != "" {
 		return dir
 	}
