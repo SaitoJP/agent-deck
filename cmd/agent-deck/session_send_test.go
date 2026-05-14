@@ -1107,6 +1107,7 @@ func TestWaitForFreshOutput_ReturnsNewResponse(t *testing.T) {
 
 		inst := session.NewInstance("codex-test", projectPath)
 		inst.Tool = "codex"
+		inst.SetTmuxSessionForTest(nil)
 
 		start := time.Now()
 		resp, err := waitForFreshOutput(inst, time.Now())

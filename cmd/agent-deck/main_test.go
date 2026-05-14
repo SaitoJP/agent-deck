@@ -116,6 +116,7 @@ func TestOuterTmuxGuard(t *testing.T) {
 	// Setup: snapshot env, restore on exit
 	origTmux := os.Getenv("TMUX")
 	origOptIn := os.Getenv("AGENT_DECK_ALLOW_OUTER_TMUX")
+	origPath := os.Getenv("PATH")
 	t.Cleanup(func() {
 		if origTmux == "" {
 			os.Unsetenv("TMUX")
@@ -127,7 +128,19 @@ func TestOuterTmuxGuard(t *testing.T) {
 		} else {
 			os.Setenv("AGENT_DECK_ALLOW_OUTER_TMUX", origOptIn)
 		}
+		if origPath == "" {
+			os.Unsetenv("PATH")
+		} else {
+			os.Setenv("PATH", origPath)
+		}
 	})
+
+	tmuxStubDir := t.TempDir()
+	tmuxStubPath := filepath.Join(tmuxStubDir, "tmux")
+	if err := os.WriteFile(tmuxStubPath, []byte("#!/bin/sh\nprintf '%s\\n' 'work'\n"), 0o755); err != nil {
+		t.Fatalf("write tmux stub: %v", err)
+	}
+	os.Setenv("PATH", tmuxStubDir+string(os.PathListSeparator)+origPath)
 
 	t.Run("outer_tmux_no_optin_blocks", func(t *testing.T) {
 		os.Setenv("TMUX", "/tmp/tmux-501/default,12345,0")

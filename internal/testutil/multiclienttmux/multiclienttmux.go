@@ -17,6 +17,7 @@ package multiclienttmux
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -55,7 +56,11 @@ func New(t *testing.T, sessionName string) *Harness {
 		t.Skip("multiclienttmux: tmux binary not available")
 	}
 
-	socketDir := t.TempDir()
+	socketDir, err := os.MkdirTemp("/tmp", "admc-")
+	if err != nil {
+		t.Fatalf("multiclienttmux: mkdir temp socket dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
 	socketPath := filepath.Join(socketDir, "sock")
 
 	// Detached new-session on the isolated socket. -x/-y set the initial

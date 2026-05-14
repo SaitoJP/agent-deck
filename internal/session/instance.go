@@ -3928,22 +3928,19 @@ func (i *Instance) GetLastResponseBestEffort() (*ResponseOutput, error) {
 			}
 		}
 
-		// Copilot-specific recovery path.
-		if i.Tool == "copilot" {
-			if i.tmuxSession != nil {
-				if sessionID, envErr := i.tmuxSession.GetEnvironment("COPILOT_SESSION_ID"); envErr == nil && sessionID != "" {
-					i.CopilotSessionID = sessionID
-					i.CopilotDetectedAt = time.Now()
-					if recovered, recoverErr := i.getCopilotLastResponse(); recoverErr == nil {
-						return recovered, nil
-					}
-				}
+		// Fallback: detect latest session on disk (handles startup race / stale ID)
+		i.syncGeminiSessionFromDisk()
+		if i.GeminiSessionID != "" {
+			if recovered, recoverErr := i.getGeminiLastResponse(); recoverErr == nil {
+				return recovered, nil
 			}
+		}
+	}
 
-			// Fallback: detect the most recent Copilot session in the same working
-			// directory. This mirrors the startup detection path and is sufficient
-			// for CLI read commands like `session output`.
-			if sessionID := detectCopilotSessionFromDisk(i.EffectiveWorkingDir(), time.Time{}); sessionID != "" {
+	// Copilot-specific recovery path.
+	if i.Tool == "copilot" {
+		if i.tmuxSession != nil {
+			if sessionID, envErr := i.tmuxSession.GetEnvironment("COPILOT_SESSION_ID"); envErr == nil && sessionID != "" {
 				i.CopilotSessionID = sessionID
 				i.CopilotDetectedAt = time.Now()
 				if recovered, recoverErr := i.getCopilotLastResponse(); recoverErr == nil {
@@ -3952,10 +3949,14 @@ func (i *Instance) GetLastResponseBestEffort() (*ResponseOutput, error) {
 			}
 		}
 
-		// Fallback: detect latest session on disk (handles startup race / stale ID)
-		i.syncGeminiSessionFromDisk()
-		if i.GeminiSessionID != "" {
-			if recovered, recoverErr := i.getGeminiLastResponse(); recoverErr == nil {
+		// Fallback: detect the most recent Copilot session in the same working
+		// directory within the same launch window. Using an unbounded search here
+		// can misbind to an unrelated older Copilot conversation from the same
+		// repo when the session ID is temporarily missing.
+		if sessionID := detectCopilotSessionFromDisk(i.EffectiveWorkingDir(), i.copilotSessionStartedAfter()); sessionID != "" {
+			i.CopilotSessionID = sessionID
+			i.CopilotDetectedAt = time.Now()
+			if recovered, recoverErr := i.getCopilotLastResponse(); recoverErr == nil {
 				return recovered, nil
 			}
 		}
@@ -3983,6 +3984,16 @@ func (i *Instance) GetLastResponseBestEffort() (*ResponseOutput, error) {
 	}
 
 	return nil, err
+}
+
+func (i *Instance) copilotSessionStartedAfter() time.Time {
+	if i.CopilotStartedAt > 0 {
+		return time.UnixMilli(i.CopilotStartedAt).Add(-2 * time.Second)
+	}
+	if !i.LastStartedAt.IsZero() {
+		return i.LastStartedAt.Add(-2 * time.Second)
+	}
+	return time.Now().Add(-30 * time.Second)
 }
 
 // GetJSONLPath returns the path to the Claude session JSONL file for analytics

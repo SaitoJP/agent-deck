@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/asheshgoplani/agent-deck/internal/testutil"
 )
 
 // createBareRepoLayout builds the bare-repository layout described in issue #715:
@@ -26,7 +28,8 @@ func createBareRepoLayout(t *testing.T, worktreeNames ...string) (projectRoot, b
 	bareDir = filepath.Join(projectRoot, ".bare")
 
 	run := func(args ...string) {
-		cmd := exec.Command("git", args...)
+		cmd := exec.Command("git", append([]string{"-c", "safe.bareRepository=all"}, args...)...)
+		cmd.Env = testutil.CleanGitEnv(os.Environ())
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
@@ -40,8 +43,9 @@ func createBareRepoLayout(t *testing.T, worktreeNames ...string) (projectRoot, b
 	seedDir := t.TempDir()
 	run("clone", bareDir, seedDir)
 	runIn := func(dir string, args ...string) {
-		cmd := exec.Command("git", args...)
+		cmd := exec.Command("git", append([]string{"-c", "safe.bareRepository=all"}, args...)...)
 		cmd.Dir = dir
+		cmd.Env = testutil.CleanGitEnv(os.Environ())
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {

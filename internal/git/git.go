@@ -15,6 +15,18 @@ import (
 
 var consecutiveDashesRe = regexp.MustCompile(`-+`)
 
+func gitCommand(args ...string) *exec.Cmd {
+	return exec.Command("git", append([]string{"-c", "safe.bareRepository=all"}, args...)...)
+}
+
+func gitCommandInDir(dir string, args ...string) *exec.Cmd {
+	return gitCommand(append([]string{"-C", dir}, args...)...)
+}
+
+func gitCommandWithGitDir(dir string, args ...string) *exec.Cmd {
+	return gitCommand(append([]string{"--git-dir", dir}, args...)...)
+}
+
 // Worktree represents a git worktree
 type Worktree struct {
 	Path   string // Filesystem path to the worktree
@@ -25,15 +37,22 @@ type Worktree struct {
 
 // IsGitRepo checks if the given directory is inside a git repository
 func IsGitRepo(dir string) bool {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--git-dir")
-	err := cmd.Run()
-	return err == nil
+	cmd := gitCommandInDir(dir, "rev-parse", "--git-dir")
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+	cmd = gitCommandWithGitDir(dir, "rev-parse", "--git-dir")
+	return cmd.Run() == nil
 }
 
 // IsBareRepo returns true if dir itself is a bare git repository. For a linked
 // worktree checkout, this returns false — use IsBareRepoWorktree for that case.
 func IsBareRepo(dir string) bool {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--is-bare-repository")
+	cmd := gitCommandInDir(dir, "rev-parse", "--is-bare-repository")
+	if output, err := cmd.Output(); err == nil {
+		return strings.TrimSpace(string(output)) == "true"
+	}
+	cmd = gitCommandWithGitDir(dir, "rev-parse", "--is-bare-repository")
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -56,7 +75,7 @@ func IsBareRepoWorktree(dir string) bool {
 // gitCommonDirAbs returns the absolute path reported by
 // `git rev-parse --git-common-dir`, resolving any relative path against dir.
 func gitCommonDirAbs(dir string) (string, error) {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--git-common-dir")
+	cmd := gitCommandInDir(dir, "rev-parse", "--git-common-dir")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -74,7 +93,18 @@ func gitCommonDirAbs(dir string) (string, error) {
 // worktree path for the main checkout) it returns the real working tree.
 // Falls back to path on any git failure.
 func resolveWorktreeToToplevel(path string) string {
-	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")
+	cmd := gitCommandWithGitDir(path, "config", "--path", "core.worktree")
+	if out, err := cmd.Output(); err == nil {
+		worktree := strings.TrimSpace(string(out))
+		if worktree != "" {
+			if !filepath.IsAbs(worktree) {
+				worktree = filepath.Clean(filepath.Join(path, worktree))
+			}
+			return worktree
+		}
+	}
+
+	cmd = gitCommandInDir(path, "rev-parse", "--show-toplevel")
 	out, err := cmd.Output()
 	if err != nil {
 		return path
@@ -175,7 +205,7 @@ func IsGitRepoOrBareProjectRoot(dir string) bool {
 
 // GetRepoRoot returns the root directory of the git repository containing dir
 func GetRepoRoot(dir string) (string, error) {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel")
+	cmd := gitCommandInDir(dir, "rev-parse", "--show-toplevel")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("not a git repository: %w", err)
@@ -185,7 +215,7 @@ func GetRepoRoot(dir string) (string, error) {
 
 // GetCurrentBranch returns the current branch name for the repository at dir
 func GetCurrentBranch(dir string) (string, error) {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD")
+	cmd := gitCommandInDir(dir, "rev-parse", "--abbrev-ref", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
@@ -196,14 +226,14 @@ func GetCurrentBranch(dir string) (string, error) {
 // BranchExists checks if a branch exists in the repository
 func BranchExists(repoDir, branchName string) bool {
 	repoDir = resolveGitInvocationDir(repoDir)
-	cmd := exec.Command("git", "-C", repoDir, "show-ref", "--verify", "--quiet", "refs/heads/"+branchName)
+	cmd := gitCommandInDir(repoDir, "show-ref", "--verify", "--quiet", "refs/heads/"+branchName)
 	err := cmd.Run()
 	return err == nil
 }
 
 func remoteBranchExists(repoDir, remoteName, branchName string) bool {
 	repoDir = resolveGitInvocationDir(repoDir)
-	cmd := exec.Command("git", "-C", repoDir, "show-ref", "--verify", "--quiet", "refs/remotes/"+remoteName+"/"+branchName)
+	cmd := gitCommandInDir(repoDir, "show-ref", "--verify", "--quiet", "refs/remotes/"+remoteName+"/"+branchName)
 	err := cmd.Run()
 	return err == nil
 }
@@ -330,14 +360,14 @@ func CreateWorktree(repoDir, worktreePath, branchName string) error {
 	switch resolution.Mode {
 	case worktreeBranchLocal:
 		// Reuse an existing local branch.
-		cmd = exec.Command("git", "-C", repoDir, "worktree", "add", worktreePath, branchName)
+		cmd = gitCommandInDir(repoDir, "worktree", "add", worktreePath, branchName)
 	case worktreeBranchRemote:
 		// Create a local tracking branch from the default remote.
 		remoteRef := resolution.Remote + "/" + branchName
-		cmd = exec.Command("git", "-C", repoDir, "worktree", "add", "--track", "-b", branchName, worktreePath, remoteRef)
+		cmd = gitCommandInDir(repoDir, "worktree", "add", "--track", "-b", branchName, worktreePath, remoteRef)
 	default:
 		// Create a new local branch.
-		cmd = exec.Command("git", "-C", repoDir, "worktree", "add", "-b", branchName, worktreePath)
+		cmd = gitCommandInDir(repoDir, "worktree", "add", "-b", branchName, worktreePath)
 	}
 
 	output, err := cmd.CombinedOutput()
@@ -355,7 +385,7 @@ func ListWorktrees(repoDir string) ([]Worktree, error) {
 		return nil, errors.New("not a git repository")
 	}
 
-	cmd := exec.Command("git", "-C", repoDir, "worktree", "list", "--porcelain")
+	cmd := gitCommandInDir(repoDir, "worktree", "list", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
@@ -432,7 +462,7 @@ func RemoveWorktree(repoDir, worktreePath string, force bool) error {
 	}
 	args = append(args, worktreePath)
 
-	cmd := exec.Command("git", args...)
+	cmd := gitCommand(args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if !force {
@@ -476,7 +506,7 @@ func GetWorktreeForBranch(repoDir, branchName string) (string, error) {
 
 // IsWorktree checks if the given directory is a git worktree (not the main repo)
 func IsWorktree(dir string) bool {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--git-common-dir")
+	cmd := gitCommandInDir(dir, "rev-parse", "--git-common-dir")
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -484,7 +514,7 @@ func IsWorktree(dir string) bool {
 
 	commonDir := strings.TrimSpace(string(output))
 
-	cmd = exec.Command("git", "-C", dir, "rev-parse", "--git-dir")
+	cmd = gitCommandInDir(dir, "rev-parse", "--git-dir")
 	output, err = cmd.Output()
 	if err != nil {
 		return false
@@ -627,7 +657,7 @@ func getDefaultRemote(repoDir string) (string, error) {
 
 	currentBranch, err := GetCurrentBranch(repoDir)
 	if err == nil && currentBranch != "" && currentBranch != "HEAD" {
-		cmd := exec.Command("git", "-C", repoDir, "config", "--get", "branch."+currentBranch+".remote")
+		cmd := gitCommandInDir(repoDir, "config", "--get", "branch."+currentBranch+".remote")
 		output, err := cmd.Output()
 		if err == nil {
 			remote := strings.TrimSpace(string(output))
@@ -651,7 +681,7 @@ func getDefaultRemote(repoDir string) (string, error) {
 }
 
 func listRemotes(repoDir string) ([]string, error) {
-	cmd := exec.Command("git", "-C", repoDir, "remote")
+	cmd := gitCommandInDir(repoDir, "remote")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list remotes: %w", err)
@@ -671,7 +701,7 @@ func listRemotes(repoDir string) ([]string, error) {
 func listRefShortNames(repoDir string, refs ...string) ([]string, error) {
 	args := []string{"-C", repoDir, "for-each-ref", "--format=%(refname:short)"}
 	args = append(args, refs...)
-	cmd := exec.Command("git", args...)
+	cmd := gitCommand(args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list refs: %w", err)
@@ -742,7 +772,7 @@ func ListBranchCandidates(repoDir string) ([]string, error) {
 
 // HasUncommittedChanges checks if the repository at dir has uncommitted changes
 func HasUncommittedChanges(dir string) (bool, error) {
-	cmd := exec.Command("git", "-C", dir, "status", "--porcelain")
+	cmd := gitCommandInDir(dir, "status", "--porcelain")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return false, fmt.Errorf("failed to check git status: %s: %w", strings.TrimSpace(string(output)), err)
@@ -753,7 +783,7 @@ func HasUncommittedChanges(dir string) (bool, error) {
 // GetDefaultBranch returns the default branch name (e.g. "main" or "master") for the repo
 func GetDefaultBranch(repoDir string) (string, error) {
 	// Try symbolic-ref first (works when remote HEAD is set)
-	cmd := exec.Command("git", "-C", repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
+	cmd := gitCommandInDir(repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
 	output, err := cmd.Output()
 	if err == nil {
 		ref := strings.TrimSpace(string(output))
@@ -776,7 +806,7 @@ func GetDefaultBranch(repoDir string) (string, error) {
 
 // MergeBranch merges the given branch into the current branch of the repository
 func MergeBranch(repoDir, branchName string) error {
-	cmd := exec.Command("git", "-C", repoDir, "merge", branchName)
+	cmd := gitCommandInDir(repoDir, "merge", branchName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("merge failed: %s: %w", strings.TrimSpace(string(output)), err)
@@ -790,7 +820,7 @@ func DeleteBranch(repoDir, branchName string, force bool) error {
 	if force {
 		flag = "-D"
 	}
-	cmd := exec.Command("git", "-C", repoDir, "branch", flag, branchName)
+	cmd := gitCommandInDir(repoDir, "branch", flag, branchName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to delete branch: %s: %w", strings.TrimSpace(string(output)), err)
@@ -800,7 +830,7 @@ func DeleteBranch(repoDir, branchName string, force bool) error {
 
 // PruneWorktrees removes stale worktree references
 func PruneWorktrees(repoDir string) error {
-	cmd := exec.Command("git", "-C", repoDir, "worktree", "prune")
+	cmd := gitCommandInDir(repoDir, "worktree", "prune")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to prune worktrees: %s: %w", strings.TrimSpace(string(output)), err)

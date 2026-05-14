@@ -60,13 +60,17 @@ func IsolateTmuxSocket() func() {
 	_ = os.Unsetenv("TMUX")
 	_ = os.Unsetenv("TMUX_PANE")
 
-	dir, err := os.MkdirTemp("", "agent-deck-test-tmux-")
+	// tmux appends /tmux-<uid>/default under TMUX_TMPDIR. On macOS, the
+	// default os.TempDir() lives under a very long /var/folders/... prefix,
+	// which can push the final UNIX socket path past the kernel limit.
+	// Use /tmp explicitly to keep the derived socket path short.
+	dir, err := os.MkdirTemp("/tmp", "adtt-")
 	if err != nil {
 		// If we can't isolate via MkdirTemp, we still want tests to
 		// run — but we REALLY don't want them on the default socket.
 		// Fall back to a PID-keyed path that won't collide with other
 		// test runs or the user's real sessions.
-		dir = fmt.Sprintf("/tmp/agent-deck-test-tmux-fallback-%d", os.Getpid())
+		dir = fmt.Sprintf("/tmp/adtt-fallback-%d", os.Getpid())
 		_ = os.MkdirAll(dir, 0o700)
 	}
 	_ = os.Setenv("TMUX_TMPDIR", dir)

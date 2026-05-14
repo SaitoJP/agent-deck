@@ -1351,7 +1351,7 @@ func TestSessionClosedMsgUsesConfiguredRestartHint(t *testing.T) {
 	if h.err == nil {
 		t.Fatal("expected close-session message to be set")
 	}
-	if !strings.Contains(h.err.Error(), "ctrl+r to restart") {
+	if !strings.Contains(h.err.Error(), "ctrl+r to resume") {
 		t.Fatalf("close-session message should use configured restart key, got %q", h.err.Error())
 	}
 }
@@ -1854,8 +1854,8 @@ func TestRenderHelpBarCompactWithSession(t *testing.T) {
 	if !strings.Contains(result, "New") {
 		t.Error("Compact help bar should contain 'New'")
 	}
-	if !strings.Contains(result, "Restart") {
-		t.Error("Compact help bar should contain 'Restart'")
+	if !strings.Contains(result, "Resume") {
+		t.Error("Compact help bar should contain 'Resume'")
 	}
 	// Should have fork since session can fork
 	if !strings.Contains(result, "Fork") {
@@ -2145,6 +2145,10 @@ func newTestHomeWithItems(width, height int, items []session.Item) *Home {
 }
 
 func TestMouseYToItemIndex(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	session.ClearUserConfigCache()
+	t.Cleanup(session.ClearUserConfigCache)
+
 	// Standard layout: header(1) + filter(1) + panelTitle(2) = startY 4
 	// No banners, no scroll offset
 	items := []session.Item{
@@ -2176,6 +2180,7 @@ func TestMouseYToItemIndex(t *testing.T) {
 			home := newTestHomeWithItems(100, 30, items)
 			home.viewOffset = tc.viewOffset
 			if tc.banners {
+				t.Setenv(update.SkipUpdateCheckEnv, "0")
 				// v1.7.59: the update banner now renders via ShouldNudge,
 				// which requires ReleasesBehind > NudgeThreshold. Any
 				// value >5 flips the same banner path this test measured.

@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -175,6 +176,48 @@ func TestReadCopilotSessionStart_EmptyFile(t *testing.T) {
 	}
 }
 
+func TestGetLastResponseBestEffort_CopilotDoesNotBindOlderConversation(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("COPILOT_CONFIG_DIR", tmpDir)
+
+	oldSessionID := "old-session"
+	oldStart := time.Now().Add(-10 * time.Minute)
+	oldSessionDir := filepath.Join(tmpDir, "session-state", oldSessionID)
+	if err := os.MkdirAll(oldSessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldEvents := strings.Join([]string{
+		fmt.Sprintf(`{"type":"session.start","data":{"sessionId":"%s","context":{"cwd":"/tmp/project"},"startTime":"%s"}}`, oldSessionID, oldStart.Format(time.RFC3339Nano)),
+		`{"type":"assistant.message","data":{"role":"assistant","content":"stale old reply"}}`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(oldSessionDir, "events.jsonl"), []byte(oldEvents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	inst := NewInstance("copilot-best-effort", "/tmp/project")
+	inst.Tool = "copilot"
+	inst.CopilotSessionID = ""
+	inst.CopilotDetectedAt = time.Time{}
+	inst.CopilotStartedAt = 0
+	inst.LastStartedAt = time.Now()
+	inst.tmuxSession = nil
+
+	resp, err := inst.GetLastResponseBestEffort()
+	if err != nil {
+		t.Fatalf("GetLastResponseBestEffort() unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("GetLastResponseBestEffort() returned nil response")
+	}
+	if resp.Content != "" {
+		t.Fatalf("expected empty response instead of stale conversation, got %q", resp.Content)
+	}
+	if inst.CopilotSessionID != "" {
+		t.Fatalf("CopilotSessionID rebound to %q, want empty", inst.CopilotSessionID)
+	}
+}
+
 func TestCopilotSessionHasConversationData(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -334,6 +377,10 @@ func TestNewCopilotOptions_NilConfig(t *testing.T) {
 }
 
 func TestBuildCopilotCommand_Fresh(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	ClearUserConfigCache()
+	t.Cleanup(ClearUserConfigCache)
+
 	inst := &Instance{
 		Tool:    "copilot",
 		Command: "copilot",
@@ -376,6 +423,10 @@ func TestBuildCopilotCommand_TitleOnlyDoesNotTriggerConductorBootstrap(t *testin
 }
 
 func TestBuildCopilotCommand_WithModel(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	ClearUserConfigCache()
+	t.Cleanup(ClearUserConfigCache)
+
 	inst := &Instance{
 		Tool:         "copilot",
 		Command:      "copilot",
@@ -389,6 +440,10 @@ func TestBuildCopilotCommand_WithModel(t *testing.T) {
 }
 
 func TestBuildCopilotCommand_WithAllowAll(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	ClearUserConfigCache()
+	t.Cleanup(ClearUserConfigCache)
+
 	inst := &Instance{
 		Tool:            "copilot",
 		Command:         "copilot",

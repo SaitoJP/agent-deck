@@ -441,6 +441,7 @@ func main() {
 			_ = db.ResignPrimary()
 			_ = db.UnregisterInstance()
 		}
+		logging.Shutdown()
 		os.Exit(0)
 	}()
 
