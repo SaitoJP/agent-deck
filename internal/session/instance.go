@@ -67,6 +67,10 @@ const (
 	// repeated /proc and lsof scans on every status tick.
 	codexProbeScanInterval    = 2 * time.Second
 	codexProbeMissingSentinel = "__AGENT_DECK_MISSING_TOOL__"
+	// RestartFresh can race a late SessionEnd hook from the process it just
+	// discarded. Ignore that exact old session ID briefly so a fresh restart
+	// cannot be rebound to the dying session.
+	freshRestartHookSuppressWindow = 5 * time.Second
 )
 
 // Instance represents a single agent/shell session
@@ -254,6 +258,10 @@ type Instance struct {
 	hookEvent      string    // Hook event name that caused the last status (e.g. "PermissionRequest")
 	hookSessionID  string    // Session ID from hook payload
 	hookLastUpdate time.Time // When hook status was last received
+	// Fresh-restart suppression window for stale hook payloads from the process
+	// that was just discarded.
+	suppressedHookSessionID    string
+	suppressedHookSessionUntil time.Time
 
 	// mu protects fields written by backgroundStatusUpdate and read by the TUI goroutine.
 	// Use GetStatus()/SetStatus() and GetTool()/SetTool() for thread-safe access.
@@ -2899,15 +2907,17 @@ func (i *Instance) UpdateStatus() error {
 	// Read the hook file from disk once to give CLI the same fast path as the TUI.
 	if i.hookStatus == "" && (IsClaudeCompatible(i.Tool) || i.Tool == "codex" || i.Tool == "gemini" || i.Tool == "copilot") {
 		if hs := readHookStatusFile(i.ID); hs != nil {
-			i.hookStatus = hs.Status
-			i.hookEvent = hs.Event
-			i.hookLastUpdate = hs.UpdatedAt
-			i.hookSessionID = hs.SessionID
-			// Reset stale acknowledged flag from ReconnectSessionLazy.
-			// Without this, sessions loaded from SQLite with previousStatus="idle"
-			// would report idle even when the hook file says waiting/running.
-			if i.tmuxSession != nil && (hs.Status == "running" || hs.Status == "waiting") {
-				i.tmuxSession.ResetAcknowledged()
+			if !i.shouldIgnoreSuppressedHookSessionIDLocked(strings.TrimSpace(hs.SessionID)) {
+				i.hookStatus = hs.Status
+				i.hookEvent = hs.Event
+				i.hookLastUpdate = hs.UpdatedAt
+				i.hookSessionID = hs.SessionID
+				// Reset stale acknowledged flag from ReconnectSessionLazy.
+				// Without this, sessions loaded from SQLite with previousStatus="idle"
+				// would report idle even when the hook file says waiting/running.
+				if i.tmuxSession != nil && (hs.Status == "running" || hs.Status == "waiting") {
+					i.tmuxSession.ResetAcknowledged()
+				}
 			}
 		}
 	}
@@ -3202,6 +3212,14 @@ func (i *Instance) UpdateHookStatus(status *HookStatus) {
 	if sessionID == "" {
 		return
 	}
+	if i.shouldIgnoreSuppressedHookSessionIDLocked(sessionID) {
+		sessionLog.Debug("hook_session_update_ignored_during_fresh_restart",
+			slog.String("tool", i.Tool),
+			slog.String("session_id", sessionID),
+			slog.String("event", status.Event),
+		)
+		return
+	}
 
 	switch {
 	case IsClaudeCompatible(i.Tool):
@@ -3335,6 +3353,19 @@ func (i *Instance) ClearHookStatus() {
 	defer i.mu.Unlock()
 	i.hookStatus = ""
 	i.hookLastUpdate = time.Time{}
+}
+
+func (i *Instance) shouldIgnoreSuppressedHookSessionIDLocked(sessionID string) bool {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || i.suppressedHookSessionID == "" {
+		return false
+	}
+	if time.Now().After(i.suppressedHookSessionUntil) {
+		i.suppressedHookSessionID = ""
+		i.suppressedHookSessionUntil = time.Time{}
+		return false
+	}
+	return sessionID == i.suppressedHookSessionID
 }
 
 // ForceNextStatusCheck clears the idle polling optimization so the next
@@ -3703,17 +3734,24 @@ func (i *Instance) SyncSessionIDsToTmux() {
 }
 
 func (i *Instance) clearSessionBindingForFreshStart() {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	discardedSessionID := ""
 	if IsClaudeCompatible(i.Tool) {
+		discardedSessionID = i.ClaudeSessionID
 		i.ClaudeSessionID = ""
 		i.ClaudeDetectedAt = time.Time{}
 	}
 
 	if i.Tool == "gemini" {
+		discardedSessionID = i.GeminiSessionID
 		i.GeminiSessionID = ""
 		i.GeminiDetectedAt = time.Time{}
 	}
 
 	if i.Tool == "opencode" {
+		discardedSessionID = i.OpenCodeSessionID
 		i.OpenCodeSessionID = ""
 		i.OpenCodeDetectedAt = time.Time{}
 		i.OpenCodeStartedAt = 0
@@ -3721,19 +3759,32 @@ func (i *Instance) clearSessionBindingForFreshStart() {
 	}
 
 	if i.Tool == "codex" {
+		discardedSessionID = i.CodexSessionID
 		i.CodexSessionID = ""
 		i.CodexDetectedAt = time.Time{}
 		i.CodexStartedAt = 0
 		i.lastCodexScanAt = time.Time{}
-		i.mu.Lock()
 		i.pendingCodexRestartWarning = ""
-		i.mu.Unlock()
 	}
 
 	if i.Tool == "copilot" {
+		discardedSessionID = i.CopilotSessionID
 		i.CopilotSessionID = ""
 		i.CopilotDetectedAt = time.Time{}
 		i.CopilotStartedAt = 0
+	}
+
+	i.hookStatus = ""
+	i.hookEvent = ""
+	i.hookLastUpdate = time.Time{}
+	i.hookSessionID = ""
+	ClearHookSessionAnchor(i.ID)
+
+	i.suppressedHookSessionID = strings.TrimSpace(discardedSessionID)
+	if i.suppressedHookSessionID != "" {
+		i.suppressedHookSessionUntil = time.Now().Add(freshRestartHookSuppressWindow)
+	} else {
+		i.suppressedHookSessionUntil = time.Time{}
 	}
 }
 

@@ -1898,6 +1898,61 @@ func TestInstance_ClearSessionBindingForFreshStart(t *testing.T) {
 	}
 }
 
+func TestCopilotRestartFresh_IgnoresLateSessionEndHookFromDiscardedSession(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	if err := os.Setenv("HOME", tmpHome); err != nil {
+		t.Fatalf("set HOME: %v", err)
+	}
+	defer os.Setenv("HOME", origHome)
+
+	origCopilotHome := os.Getenv("COPILOT_HOME")
+	if err := os.Unsetenv("COPILOT_HOME"); err != nil {
+		t.Fatalf("unset COPILOT_HOME: %v", err)
+	}
+	defer os.Setenv("COPILOT_HOME", origCopilotHome)
+
+	origCopilotConfigDir := os.Getenv("COPILOT_CONFIG_DIR")
+	if err := os.Unsetenv("COPILOT_CONFIG_DIR"); err != nil {
+		t.Fatalf("unset COPILOT_CONFIG_DIR: %v", err)
+	}
+	defer os.Setenv("COPILOT_CONFIG_DIR", origCopilotConfigDir)
+
+	const oldID = "fb52339e-dbd1-4f3c-a9f1-72aa4cac682e"
+	inst := &Instance{
+		ID:                "copilot-fresh-race",
+		Tool:              "copilot",
+		Command:           "copilot",
+		ProjectPath:       "/tmp/copilot-fresh-race",
+		CopilotSessionID:  oldID,
+		CopilotDetectedAt: time.Now(),
+	}
+	WriteHookSessionAnchor(inst.ID, oldID)
+
+	inst.clearSessionBindingForFreshStart()
+	inst.UpdateHookStatus(&HookStatus{
+		Status:    "dead",
+		SessionID: oldID,
+		Event:     "SessionEnd",
+		UpdatedAt: time.Now(),
+	})
+
+	if inst.CopilotSessionID != "" {
+		t.Fatalf("CopilotSessionID = %q, want empty after stale SessionEnd hook", inst.CopilotSessionID)
+	}
+	if inst.hookSessionID != "" {
+		t.Fatalf("hookSessionID = %q, want empty after stale SessionEnd hook", inst.hookSessionID)
+	}
+	if got := ReadHookSessionAnchor(inst.ID); got != "" {
+		t.Fatalf("hook session anchor = %q, want cleared on fresh restart", got)
+	}
+
+	cmd := buildCopilotCommand(inst)
+	if strings.Contains(cmd, "--resume "+oldID) {
+		t.Fatalf("fresh restart command should not resume discarded session %q, got %q", oldID, cmd)
+	}
+}
+
 func TestInstance_ForkOpenCode(t *testing.T) {
 	inst := NewInstanceWithTool("test", "/tmp/test", "opencode")
 
