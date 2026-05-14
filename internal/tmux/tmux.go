@@ -3500,7 +3500,7 @@ func defaultResolvedPatternsForTool(tool string) *ResolvedPatterns {
 	return resolved
 }
 
-func hasInterruptBusyContext(lines []string, phrase string, spinnerChars []string) bool {
+func hasStatusBarBusyContext(lines []string, phrase string, spinnerChars []string) bool {
 	phrase = strings.ToLower(strings.TrimSpace(phrase))
 	if phrase == "" {
 		return false
@@ -3512,7 +3512,7 @@ func hasInterruptBusyContext(lines []string, phrase string, spinnerChars []strin
 			continue
 		}
 
-		// Exact interrupt prompt line (older tool variants).
+		// Exact footer/status line.
 		if clean == phrase {
 			return true
 		}
@@ -3594,8 +3594,8 @@ func (s *Session) hasBusyIndicatorResolved(content string) bool {
 			if !strings.Contains(lowerContent, lowerStr) {
 				continue
 			}
-			if strings.Contains(lowerStr, "interrupt") &&
-				!hasInterruptBusyContext(statusBarLines, lowerStr, spinnerChars) {
+			if (strings.Contains(lowerStr, "interrupt") || strings.Contains(lowerStr, "cancel")) &&
+				!hasStatusBarBusyContext(statusBarLines, lowerStr, spinnerChars) {
 				statusLog.Debug("busy_string_ignored_no_context",
 					slog.String("session", shortName),
 					slog.String("pattern", str))

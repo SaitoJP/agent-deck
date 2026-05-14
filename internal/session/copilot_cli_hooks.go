@@ -30,6 +30,9 @@ var copilotHookEventConfigs = []struct {
 	{Event: "SessionStart"},
 	{Event: "UserPromptSubmit"},
 	{Event: "Stop"},
+	// Copilot CLI uses agentStop for turn completion on newer builds.
+	// Keep Stop as well for compatibility with older event names.
+	{Event: "agentStop"},
 	{Event: "PermissionRequest"},
 	{Event: "Notification", Matcher: "permission_prompt|elicitation_dialog"},
 	{Event: "SessionEnd"},

@@ -93,14 +93,11 @@ func DefaultRawPatterns(toolName string) *RawPatterns {
 		// Patterns are based on real-world Copilot CLI TUI transcripts.
 		return &RawPatterns{
 			BusyPatterns: []string{
+				"esc to cancel",
 				"esc to interrupt",
 				"ctrl+c to interrupt",
-				"thinking",
-				"Thinking",
-				"Generating",
-				"Reading",
-				"Searching",
-				"Running",
+				`re:(?im)^(?:(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●◉◎○])\s+)?[^\n()]+\(\s*esc to cancel\s*·[^\n]*\)$`,
+				`re:(?im)^(?:(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●◉◎○])\s+)?thinking\b[^\n]*$`,
 				`re:(?m)^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s`,
 			},
 			PromptPatterns: []string{

@@ -62,12 +62,19 @@ func TestDerive_NonHookEmittingToolsUntouched(t *testing.T) {
 	}
 }
 
+func TestIsHookEmittingTool_Copilot(t *testing.T) {
+	t.Parallel()
+	if !sessionstatus.IsHookEmittingTool("copilot") {
+		t.Fatal("copilot must be treated as a hook-emitting tool")
+	}
+}
+
 // TestDerive_FreshHookOverridesStaleSnapshotError reproduces the v1.7.81
 // production bug for the web surface: snapshot=error, fresh hook=waiting.
 // Both surfaces (web and instance.go) must lift the snapshot to waiting.
 func TestDerive_FreshHookOverridesStaleSnapshotError(t *testing.T) {
 	t.Parallel()
-	for _, tool := range []string{"claude", "codex", "gemini"} {
+	for _, tool := range []string{"claude", "codex", "gemini", "copilot"} {
 		t.Run(tool, func(t *testing.T) {
 			out := sessionstatus.Derive(sessionstatus.Input{
 				Tool:        tool,

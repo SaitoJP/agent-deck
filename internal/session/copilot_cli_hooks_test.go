@@ -163,7 +163,7 @@ func TestInjectCopilotHooks_RewritesDriftedFile(t *testing.T) {
 	if !strings.Contains(text, `"Notification"`) || !strings.Contains(text, `"permission_prompt|elicitation_dialog"`) {
 		t.Fatalf("rewritten hook file missing expected notification matcher: %s", text)
 	}
-	if !strings.Contains(text, `"Stop"`) || !strings.Contains(text, `"SessionStart"`) {
+	if !strings.Contains(text, `"Stop"`) || !strings.Contains(text, `"agentStop"`) || !strings.Contains(text, `"SessionStart"`) {
 		t.Fatalf("rewritten hook file missing required events: %s", text)
 	}
 }

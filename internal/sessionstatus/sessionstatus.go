@@ -87,12 +87,12 @@ type Decision struct {
 }
 
 // IsHookEmittingTool returns true for tools that emit lifecycle hook files.
-// Mirrors the gate at internal/session/instance.go:2854 + 2873.
+// Mirrors the hook fast-path gate in internal/session/instance.go.
 func IsHookEmittingTool(tool string) bool {
 	if session.IsClaudeCompatible(tool) {
 		return true
 	}
-	return tool == "codex" || tool == "gemini"
+	return tool == "codex" || tool == "gemini" || tool == "copilot"
 }
 
 // freshnessFor returns the freshness window for a (tool, hookStatus) pair.

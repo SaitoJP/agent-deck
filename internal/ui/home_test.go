@@ -180,6 +180,15 @@ func TestCreateSessionTool_Copilot(t *testing.T) {
 	}
 }
 
+func TestUsesHookWatcherTool_Copilot(t *testing.T) {
+	if !usesHookWatcherTool("copilot") {
+		t.Fatal("usesHookWatcherTool(copilot) = false, want true")
+	}
+	if usesHookWatcherTool("shell") {
+		t.Fatal("usesHookWatcherTool(shell) = true, want false")
+	}
+}
+
 func TestHomeInit(t *testing.T) {
 	home := NewHome()
 	cmd := home.Init()

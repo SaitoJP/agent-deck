@@ -2761,6 +2761,10 @@ func (h *Home) statusWorker() {
 	}
 }
 
+func usesHookWatcherTool(tool string) bool {
+	return session.IsClaudeCompatible(tool) || tool == "codex" || tool == "gemini" || tool == "copilot"
+}
+
 // startLogWorkers initializes the log worker pool
 func (h *Home) startLogWorkers() {
 	// Start 2 workers to handle log-triggered status updates concurrently
@@ -2857,7 +2861,7 @@ func (h *Home) backgroundStatusUpdate() {
 	// Feed hook statuses from watcher to instances (enables hook fast path in UpdateStatus)
 	if h.hookWatcher != nil {
 		for _, inst := range instances {
-			if session.IsClaudeCompatible(inst.Tool) || inst.Tool == "codex" || inst.Tool == "gemini" {
+			if usesHookWatcherTool(inst.Tool) {
 				if hs := h.hookWatcher.GetHookStatus(inst.ID); hs != nil {
 					inst.UpdateHookStatus(hs)
 				}

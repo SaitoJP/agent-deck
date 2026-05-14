@@ -25,13 +25,14 @@ func RefreshInstancesForCLIStatus(instances []*Instance) {
 
 	// Cold-load hook status files for every tool that emits lifecycle
 	// events. The CLI is a fresh OS process with no StatusFileWatcher
-	// running; without this the "running" event written by Claude's
-	// UserPromptSubmit hook never reaches UpdateStatus's fast-path window.
+	// running; without this a fresh hook transition (for example Claude or
+	// Copilot moving to running/waiting) never reaches UpdateStatus's
+	// fast-path window.
 	for _, inst := range instances {
 		if inst == nil {
 			continue
 		}
-		if !IsClaudeCompatible(inst.Tool) && inst.Tool != "codex" && inst.Tool != "gemini" {
+		if !IsClaudeCompatible(inst.Tool) && inst.Tool != "codex" && inst.Tool != "gemini" && inst.Tool != "copilot" {
 			continue
 		}
 		if hs := readHookStatusFile(inst.ID); hs != nil {

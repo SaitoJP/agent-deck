@@ -42,3 +42,73 @@ func TestDefaultRawPatterns_Copilot(t *testing.T) {
 		t.Error("copilot should have prompt patterns")
 	}
 }
+
+func TestCopilotBusyIndicator_DoesNotMatchRunningWordInPromptTranscript(t *testing.T) {
+	s := NewSession("copilot-running-word", "/tmp")
+	s.Command = "copilot"
+
+	content := `named conductor online
+Running child sessions: 3
+copilot>
+`
+	if s.hasBusyIndicator(content) {
+		t.Fatal("hasBusyIndicator() = true, want false for plain transcript text containing Running")
+	}
+}
+
+func TestCopilotBusyIndicator_MatchesEscToCancelFooter(t *testing.T) {
+	s := NewSession("copilot-esc-cancel", "/tmp")
+	s.Command = "copilot"
+
+	content := "Thinking\nEsc to cancel\n"
+	if !s.hasBusyIndicator(content) {
+		t.Fatal("hasBusyIndicator() = false, want true when Copilot footer shows Esc to cancel")
+	}
+}
+
+func TestCopilotBusyIndicator_IgnoresEscToCancelInTranscript(t *testing.T) {
+	s := NewSession("copilot-esc-cancel-prose", "/tmp")
+	s.Command = "copilot"
+
+	content := `The UI says Esc to cancel while processing.
+Here is the summary.
+copilot>
+`
+	if s.hasBusyIndicator(content) {
+		t.Fatal("hasBusyIndicator() = true, want false for transcript prose mentioning Esc to cancel")
+	}
+}
+
+func TestCopilotBusyIndicator_MatchesThinkingLine(t *testing.T) {
+	s := NewSession("copilot-thinking", "/tmp")
+	s.Command = "copilot"
+
+	content := "Thinking\ncopilot>\n"
+	if !s.hasBusyIndicator(content) {
+		t.Fatal("hasBusyIndicator() = false, want true for Copilot Thinking line")
+	}
+}
+
+func TestCopilotBusyIndicator_MatchesThinkingLineWithAnimatedPrefix(t *testing.T) {
+	for _, symbol := range []string{"●", "◉", "◎", "○"} {
+		s := NewSession("copilot-thinking-prefix-"+symbol, "/tmp")
+		s.Command = "copilot"
+
+		content := symbol + " Thinking (Esc to cancel · 887 B)\n"
+		if !s.hasBusyIndicator(content) {
+			t.Fatalf("hasBusyIndicator() = false, want true for Copilot Thinking line with animated prefix %q", symbol)
+		}
+	}
+}
+
+func TestCopilotBusyIndicator_MatchesRandomStatusTextWithAnimatedPrefix(t *testing.T) {
+	for _, symbol := range []string{"●", "◉", "◎", "○"} {
+		s := NewSession("copilot-random-status-"+symbol, "/tmp")
+		s.Command = "copilot"
+
+		content := symbol + " Testing symbol set (Esc to cancel · 2.7 KiB)\n"
+		if !s.hasBusyIndicator(content) {
+			t.Fatalf("hasBusyIndicator() = false, want true for random Copilot status text with prefix %q", symbol)
+		}
+	}
+}
