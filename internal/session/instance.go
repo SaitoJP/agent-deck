@@ -3878,6 +3878,9 @@ func (i *Instance) GetLastResponse() (*ResponseOutput, error) {
 	if i.Tool == "gemini" {
 		return i.getGeminiLastResponse()
 	}
+	if i.Tool == "copilot" {
+		return i.getCopilotLastResponse()
+	}
 	return i.getTerminalLastResponse()
 }
 
@@ -3925,6 +3928,30 @@ func (i *Instance) GetLastResponseBestEffort() (*ResponseOutput, error) {
 			}
 		}
 
+		// Copilot-specific recovery path.
+		if i.Tool == "copilot" {
+			if i.tmuxSession != nil {
+				if sessionID, envErr := i.tmuxSession.GetEnvironment("COPILOT_SESSION_ID"); envErr == nil && sessionID != "" {
+					i.CopilotSessionID = sessionID
+					i.CopilotDetectedAt = time.Now()
+					if recovered, recoverErr := i.getCopilotLastResponse(); recoverErr == nil {
+						return recovered, nil
+					}
+				}
+			}
+
+			// Fallback: detect the most recent Copilot session in the same working
+			// directory. This mirrors the startup detection path and is sufficient
+			// for CLI read commands like `session output`.
+			if sessionID := detectCopilotSessionFromDisk(i.EffectiveWorkingDir(), time.Time{}); sessionID != "" {
+				i.CopilotSessionID = sessionID
+				i.CopilotDetectedAt = time.Now()
+				if recovered, recoverErr := i.getCopilotLastResponse(); recoverErr == nil {
+					return recovered, nil
+				}
+			}
+		}
+
 		// Fallback: detect latest session on disk (handles startup race / stale ID)
 		i.syncGeminiSessionFromDisk()
 		if i.GeminiSessionID != "" {
@@ -3941,8 +3968,9 @@ func (i *Instance) GetLastResponseBestEffort() (*ResponseOutput, error) {
 		}
 	}
 
-	// For Claude and Gemini, prefer a graceful empty response instead of a hard error.
-	if IsClaudeCompatible(i.Tool) || i.Tool == "gemini" {
+	// For Claude, Gemini, and Copilot, prefer a graceful empty response instead
+	// of a hard error on CLI read paths.
+	if IsClaudeCompatible(i.Tool) || i.Tool == "gemini" || i.Tool == "copilot" {
 		toolName := i.Tool
 		if IsClaudeCompatible(toolName) {
 			toolName = "claude"

@@ -237,6 +237,81 @@ func copilotEventLooksConversational(line []byte) bool {
 		bytes.Contains(dataLower, []byte(`"role":"assistant"`))
 }
 
+// getCopilotLastResponse extracts the last assistant message from Copilot's
+// events.jsonl session log.
+func (i *Instance) getCopilotLastResponse() (*ResponseOutput, error) {
+	if i.CopilotSessionID == "" {
+		return nil, fmt.Errorf("no Copilot session ID available for this instance")
+	}
+
+	eventsPath := filepath.Join(getCopilotSessionStateDir(), i.CopilotSessionID, "events.jsonl")
+	data, err := os.ReadFile(eventsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read Copilot session file: %w", err)
+	}
+
+	return parseCopilotLastAssistantMessage(data, i.CopilotSessionID)
+}
+
+func parseCopilotLastAssistantMessage(data []byte, sessionID string) (*ResponseOutput, error) {
+	type copilotAssistantEvent struct {
+		Type      string          `json:"type"`
+		Timestamp string          `json:"timestamp"`
+		Data      json.RawMessage `json:"data"`
+	}
+	type copilotAssistantData struct {
+		Content string `json:"content"`
+	}
+
+	var lastAssistantContent string
+	var lastTimestamp string
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 4*1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+
+		var evt copilotAssistantEvent
+		if err := json.Unmarshal(line, &evt); err != nil {
+			continue
+		}
+		if evt.Type != "assistant.message" {
+			continue
+		}
+
+		var msg copilotAssistantData
+		if err := json.Unmarshal(evt.Data, &msg); err != nil {
+			continue
+		}
+		if strings.TrimSpace(msg.Content) == "" {
+			continue
+		}
+
+		lastAssistantContent = msg.Content
+		lastTimestamp = evt.Timestamp
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan Copilot session log: %w", err)
+	}
+	if lastAssistantContent == "" {
+		return nil, fmt.Errorf("no assistant response found in Copilot session")
+	}
+
+	return &ResponseOutput{
+		Tool:      "copilot",
+		Role:      "assistant",
+		Content:   lastAssistantContent,
+		Timestamp: lastTimestamp,
+		SessionID: sessionID,
+	}, nil
+}
+
 // buildCopilotCommand builds the copilot CLI command for an Instance.
 // Handles new sessions, resume, model selection, and auto-approve mode.
 func buildCopilotCommand(i *Instance) string {

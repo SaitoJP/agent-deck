@@ -263,6 +263,49 @@ func TestCopilotOptions_ToArgs_Extended(t *testing.T) {
 	}
 }
 
+func TestGetCopilotLastResponse(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	origEnv := os.Getenv("COPILOT_CONFIG_DIR")
+	os.Setenv("COPILOT_CONFIG_DIR", tmpDir)
+	defer os.Setenv("COPILOT_CONFIG_DIR", origEnv)
+
+	sessionID := "copilot-last-response-session"
+	sessionDir := filepath.Join(tmpDir, "session-state", sessionID)
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	events := strings.Join([]string{
+		`{"type":"session.start","data":{"sessionId":"copilot-last-response-session","context":{"cwd":"/tmp/test"},"startTime":"2026-05-01T10:00:00.000Z"},"timestamp":"2026-05-01T10:00:00.000Z"}`,
+		`{"type":"assistant.message","data":{"content":"","toolRequests":[{"name":"rg"}]},"timestamp":"2026-05-01T10:00:01.000Z"}`,
+		`{"type":"assistant.message","data":{"content":"First reply"},"timestamp":"2026-05-01T10:00:02.000Z"}`,
+		`{"type":"assistant.message","data":{"content":"Final structured reply from Copilot"},"timestamp":"2026-05-01T10:00:03.000Z"}`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(sessionDir, "events.jsonl"), []byte(events), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	inst := &Instance{
+		Tool:             "copilot",
+		CopilotSessionID: sessionID,
+	}
+
+	resp, err := inst.getCopilotLastResponse()
+	if err != nil {
+		t.Fatalf("getCopilotLastResponse() error = %v", err)
+	}
+	if resp.Content != "Final structured reply from Copilot" {
+		t.Fatalf("Content = %q, want final assistant reply", resp.Content)
+	}
+	if resp.Tool != "copilot" {
+		t.Fatalf("Tool = %q, want copilot", resp.Tool)
+	}
+	if resp.SessionID != sessionID {
+		t.Fatalf("SessionID = %q, want %q", resp.SessionID, sessionID)
+	}
+}
+
 func TestNewCopilotOptions_WithModelAndAllowAll(t *testing.T) {
 	config := &UserConfig{}
 	config.Copilot.DefaultModel = "claude-opus-4.6"
