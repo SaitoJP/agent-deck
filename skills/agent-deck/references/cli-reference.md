@@ -138,6 +138,15 @@ Flags can be placed before or after the session identifier.
 agent-deck session stop <id|title>
 ```
 
+### session resume
+
+```bash
+agent-deck session resume <id|title>
+```
+
+Reconnects to the bound tool conversation when supported. This uses the same
+runtime path as the TUI `R` hotkey.
+
 ### session restart
 
 ```bash

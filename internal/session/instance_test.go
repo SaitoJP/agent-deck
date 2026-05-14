@@ -1834,6 +1834,11 @@ func TestInstance_CanRestartFresh(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "copilot with session ID",
+			inst: &Instance{Tool: "copilot", CopilotSessionID: "copilot-session-1"},
+			want: true,
+		},
+		{
 			name: "shell never offers fresh restart",
 			inst: &Instance{Tool: "shell"},
 			want: false,

@@ -1,8 +1,11 @@
 package session
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -173,14 +176,65 @@ func copilotSessionHasConversationData(sessionID string) bool {
 		return false
 	}
 	eventsPath := filepath.Join(getCopilotSessionStateDir(), sessionID, "events.jsonl")
-	info, err := os.Stat(eventsPath)
+	f, err := os.Open(eventsPath)
 	if err != nil {
 		return false
 	}
-	// A fresh session has ~2-4KB for session.start + system.message.
-	// Any user interaction adds user.message + assistant.* events.
-	// Use 8KB as heuristic — anything larger likely has conversation data.
-	return info.Size() > 8*1024
+	defer f.Close()
+
+	r := bufio.NewReader(f)
+	for {
+		line, readErr := r.ReadBytes('\n')
+		if copilotEventLooksConversational(line) {
+			return true
+		}
+		if readErr == nil {
+			continue
+		}
+		if readErr == io.EOF {
+			return false
+		}
+		return false
+	}
+}
+
+func copilotEventLooksConversational(line []byte) bool {
+	trimmed := bytes.TrimSpace(line)
+	if len(trimmed) == 0 {
+		return false
+	}
+
+	var evt struct {
+		Type string          `json:"type"`
+		Role string          `json:"role"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(trimmed, &evt); err != nil {
+		return false
+	}
+
+	eventType := strings.ToLower(strings.TrimSpace(evt.Type))
+	switch {
+	case eventType == "user",
+		eventType == "assistant",
+		strings.HasPrefix(eventType, "user."),
+		strings.HasPrefix(eventType, "assistant."):
+		return true
+	case strings.HasPrefix(eventType, "system."),
+		eventType == "system",
+		eventType == "session.start":
+		return false
+	case strings.Contains(eventType, "message"):
+		return true
+	}
+
+	if role := strings.ToLower(strings.TrimSpace(evt.Role)); role == "user" || role == "assistant" {
+		return true
+	}
+
+	dataLower := bytes.ToLower(evt.Data)
+	return bytes.Contains(dataLower, []byte(`"role":"user"`)) ||
+		bytes.Contains(dataLower, []byte(`"role":"assistant"`))
 }
 
 // buildCopilotCommand builds the copilot CLI command for an Instance.

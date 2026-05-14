@@ -190,20 +190,29 @@ func TestCopilotSessionHasConversationData(t *testing.T) {
 
 	eventsPath := filepath.Join(sessionDir, "events.jsonl")
 
-	// Small file (no conversation)
-	if err := os.WriteFile(eventsPath, make([]byte, 1024), 0644); err != nil {
+	// Fresh session metadata only: no conversation yet.
+	fresh := strings.Join([]string{
+		`{"type":"session.start","data":{"sessionId":"conv-test-session","context":{"cwd":"/tmp/test"},"startTime":"2026-05-01T10:00:00.000Z"}}`,
+		`{"type":"system.message","data":{"role":"system","content":"welcome"}}`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(eventsPath, []byte(fresh), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if copilotSessionHasConversationData(sessionID) {
-		t.Error("expected false for small file")
+		t.Error("expected false for fresh metadata-only session")
 	}
 
-	// Large file (has conversation)
-	if err := os.WriteFile(eventsPath, make([]byte, 16*1024), 0644); err != nil {
+	// A short real conversation must count even when the file is small.
+	conversation := strings.Join([]string{
+		`{"type":"session.start","data":{"sessionId":"conv-test-session","context":{"cwd":"/tmp/test"},"startTime":"2026-05-01T10:00:00.000Z"}}`,
+		`{"type":"system.message","data":{"role":"system","content":"welcome"}}`,
+		`{"type":"user.message","data":{"role":"user","content":"hello"}}`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(eventsPath, []byte(conversation), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if !copilotSessionHasConversationData(sessionID) {
-		t.Error("expected true for large file")
+		t.Error("expected true for structural conversation event")
 	}
 
 	// Empty session ID
@@ -355,15 +364,19 @@ func TestBuildCopilotCommand_Resume(t *testing.T) {
 	os.Setenv("COPILOT_CONFIG_DIR", tmpDir)
 	defer os.Setenv("COPILOT_CONFIG_DIR", origEnv)
 
-	// Create session with enough data
+	// Create a session with real conversation events.
 	sessionID := "resume-session-test"
 	sessionDir := filepath.Join(tmpDir, "session-state", sessionID)
 	if err := os.MkdirAll(sessionDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 	eventsPath := filepath.Join(sessionDir, "events.jsonl")
-	// Write a large file to simulate conversation data
-	if err := os.WriteFile(eventsPath, make([]byte, 16*1024), 0644); err != nil {
+	events := strings.Join([]string{
+		`{"type":"session.start","data":{"sessionId":"resume-session-test","context":{"cwd":"/tmp/test"},"startTime":"2026-05-01T10:00:00.000Z"}}`,
+		`{"type":"user.message","data":{"role":"user","content":"hello"}}`,
+		`{"type":"assistant.message","data":{"role":"assistant","content":"hi"}}`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(eventsPath, []byte(events), 0644); err != nil {
 		t.Fatal(err)
 	}
 

@@ -3910,7 +3910,7 @@ func (h *Home) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		restartHint := ""
 		if restartKey := h.actionKey(hotkeyRestart); restartKey != "" {
-			restartHint = fmt.Sprintf(". %s to restart", restartKey)
+			restartHint = fmt.Sprintf(". %s to resume", restartKey)
 		}
 		if inst := h.getInstanceByID(msg.sessionID); inst != nil {
 			h.setError(fmt.Errorf("closed '%s'%s", inst.Title, restartHint))
@@ -10681,7 +10681,7 @@ func (h *Home) renderHelpBarCompact() string {
 				contextHints = append(contextHints, h.helpKeyShort(newQuickKey, "New"))
 			}
 			if key := h.actionKey(hotkeyRestart); key != "" {
-				contextHints = append(contextHints, h.helpKeyShort(key, "Restart"))
+				contextHints = append(contextHints, h.helpKeyShort(key, "Resume"))
 			}
 			if item.Session != nil && item.Session.CanRestartFresh() && restartFreshKey != "" {
 				contextHints = append(contextHints, h.helpKeyShort(restartFreshKey, "Fresh"))
@@ -10862,7 +10862,7 @@ func (h *Home) renderHelpBarFull() string {
 				primaryHints = append(primaryHints, h.helpKey(groupKey, "Group"))
 			}
 			if restartKey != "" {
-				primaryHints = append(primaryHints, h.helpKey(restartKey, "Restart"))
+				primaryHints = append(primaryHints, h.helpKey(restartKey, "Resume"))
 			}
 			if item.Session != nil && item.Session.CanRestartFresh() && restartFreshKey != "" {
 				primaryHints = append(primaryHints, h.helpKey(restartFreshKey, "Restart Fresh"))
@@ -12850,7 +12850,7 @@ func (h *Home) renderPreviewPane(width, height int) string {
 		if restartKey := h.actionKey(hotkeyRestart); restartKey != "" {
 			b.WriteString("  ")
 			b.WriteString(keyStyle.Render(restartKey))
-			b.WriteString(dimStyle.Render(" Resume  - restart with session resume"))
+			b.WriteString(dimStyle.Render(" Resume  - reconnect to the bound conversation"))
 			b.WriteString("\n")
 		}
 		if selected.CanRestartFresh() {
@@ -12923,7 +12923,7 @@ func (h *Home) renderPreviewPane(width, height int) string {
 		if restartKey := h.actionKey(hotkeyRestart); restartKey != "" {
 			b.WriteString("  ")
 			b.WriteString(keyStyle.Render(restartKey))
-			b.WriteString(dimStyle.Render(" Start   - create and start tmux session"))
+			b.WriteString(dimStyle.Render(" Resume  - reconnect or create the tmux session"))
 			b.WriteString("\n")
 		}
 		if selected.CanRestartFresh() {

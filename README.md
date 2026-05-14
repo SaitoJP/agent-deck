@@ -778,10 +778,10 @@ agent-deck web --token my-secret
 | `M` | Move session to group |
 | `S` | Settings |
 | `/` / `G` | Search / Global search |
-| `r` | Restart session |
+| `R` | Resume session |
+| `T` | Restart with new session ID |
 | `d` | Delete |
-| `S` | Settings |
-| `T` | Container shell (sandboxed sessions) |
+| `E` | Container shell (sandboxed sessions) |
 | `?` | Full help |
 
 See [TUI Reference](skills/agent-deck/references/tui-reference.md) for all shortcuts and [CLI Reference](skills/agent-deck/references/cli-reference.md) for all commands.

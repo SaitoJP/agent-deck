@@ -5156,6 +5156,9 @@ func (i *Instance) CanRestartFresh() bool {
 	if i.Tool == "codex" {
 		return i.CodexSessionID != ""
 	}
+	if i.Tool == "copilot" {
+		return i.CopilotSessionID != ""
+	}
 	return i.CanRestartGeneric()
 }
 

@@ -21,7 +21,8 @@ Complete reference for agent-deck Terminal UI features.
 | `Enter` | Attach to session OR toggle group |
 | `n` | New session (inherits current group) |
 | `r` | Rename session or group |
-| `R` | Restart session (reloads MCPs) |
+| `R` | Resume session (reconnects and reloads MCPs when supported) |
+| `T` | Restart with new session ID |
 | `K` / `J` | Move item up/down in order |
 | `M` | Move session to different group |
 | `m` | Open MCP Manager (Claude/Gemini) |

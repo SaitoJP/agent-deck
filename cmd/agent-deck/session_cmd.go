@@ -33,6 +33,8 @@ func handleSession(profile string, args []string) {
 		handleSessionStart(profile, args[1:])
 	case "stop":
 		handleSessionStop(profile, args[1:])
+	case "resume":
+		handleSessionResume(profile, args[1:])
 	case "remove":
 		handleSessionRemove(profile, args[1:])
 	case "restart":
@@ -83,6 +85,7 @@ func printSessionHelp() {
 	fmt.Println("Commands:")
 	fmt.Println("  start <id>              Start a session's tmux process")
 	fmt.Println("  stop <id>               Stop/kill session process")
+	fmt.Println("  resume <id>             Reconnect to the bound tool conversation when supported")
 	fmt.Println("  remove <id>             Remove session from registry (stopped/error only; --force to bypass)")
 	fmt.Println("  restart [id] [--all]    Restart session (Claude: reload MCPs)")
 	fmt.Println("  revive [--all|--name]   Rebuild dead control pipes for errored sessions")
@@ -108,6 +111,7 @@ func printSessionHelp() {
 	fmt.Println("Examples:")
 	fmt.Println("  agent-deck session start my-project")
 	fmt.Println("  agent-deck session stop abc123")
+	fmt.Println("  agent-deck session resume my-project")
 	fmt.Println("  agent-deck session restart my-project")
 	fmt.Println("  agent-deck session restart --all                # Restart all active sessions")
 	fmt.Println("  agent-deck session fork my-project -t \"my-project-fork\"")
@@ -137,6 +141,100 @@ func printSessionHelp() {
 	fmt.Println("  agent-deck session set my-project claude-session-id \"abc123-def456\"")
 	fmt.Println("  agent-deck session set my-project tool claude")
 	fmt.Println("  agent-deck session set my-project wrapper \"nvim +'terminal {command}'\"")
+}
+
+func handleSessionResume(profile string, args []string) {
+	fs := flag.NewFlagSet("session resume", flag.ExitOnError)
+	jsonOutput := fs.Bool("json", false, "Output as JSON")
+	quiet := fs.Bool("quiet", false, "Minimal output")
+	quietShort := fs.Bool("q", false, "Minimal output (short)")
+	force := fs.Bool("force", false, "Resume even if the session is already healthy and fresh (bypasses issue #30 guard)")
+
+	fs.Usage = func() {
+		fmt.Println("Usage: agent-deck session resume <id|title> [options]")
+		fmt.Println()
+		fmt.Println("Reconnect to a session's bound tool conversation when supported.")
+		fmt.Println("This recreates the tmux pane/process but keeps the conversation binding.")
+		fmt.Println()
+		fmt.Println("By default, a resume is skipped (no-op) when the session is already")
+		fmt.Println("healthy (running/waiting/idle/starting) and was started within the last")
+		fmt.Println("60 seconds. This prevents watchdog double-fires from destroying a")
+		fmt.Println("just-created tmux scope (issue #30). Use --force to resume anyway.")
+		fmt.Println()
+		fmt.Println("Options:")
+		fs.PrintDefaults()
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  agent-deck session resume my-project")
+	}
+
+	if err := fs.Parse(normalizeArgs(fs, args)); err != nil {
+		os.Exit(1)
+	}
+
+	identifier := fs.Arg(0)
+	quietMode := *quiet || *quietShort
+	out := NewCLIOutput(*jsonOutput, quietMode)
+	if identifier == "" {
+		out.Error("session identifier required", ErrCodeInvalidOperation)
+		fs.Usage()
+		os.Exit(1)
+	}
+
+	storage, instances, groups, err := loadSessionData(profile)
+	if err != nil {
+		out.Error(err.Error(), ErrCodeNotFound)
+		os.Exit(1)
+	}
+
+	inst, errMsg, errCode := ResolveSession(identifier, instances)
+	if inst == nil {
+		out.Error(errMsg, errCode)
+		if errCode == ErrCodeNotFound {
+			os.Exit(2)
+		}
+		os.Exit(1)
+		return
+	}
+
+	if skip, reason := session.ShouldSkipRestart(inst, time.Now(), *force); skip {
+		data := map[string]interface{}{
+			"success": true,
+			"skipped": true,
+			"reason":  reason,
+			"id":      inst.ID,
+			"title":   inst.Title,
+		}
+		out.Success(fmt.Sprintf("Skipped resume of %s: %s", inst.Title, reason), data)
+		return
+	}
+
+	if err := inst.Restart(); err != nil {
+		out.Error(fmt.Sprintf("failed to resume session: %v", err), ErrCodeInvalidOperation)
+		os.Exit(1)
+	}
+	inst.LastStartedAt = time.Now()
+	warning := inst.ConsumeCodexRestartWarning()
+	if warning != "" && !*jsonOutput {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
+	}
+	if session.IsClaudeCompatible(inst.Tool) && inst.ClaudeSessionID == "" {
+		inst.PostStartSync(3 * time.Second)
+	}
+	if err := saveSessionData(storage, instances, groups); err != nil {
+		out.Error(fmt.Sprintf("failed to save session state: %v", err), ErrCodeInvalidOperation)
+		os.Exit(1)
+	}
+
+	data := map[string]interface{}{
+		"success": true,
+		"id":      inst.ID,
+		"title":   inst.Title,
+	}
+	if warning != "" {
+		data["warning"] = warning
+	}
+	out.Success(fmt.Sprintf("Resumed session: %s", inst.Title), data)
 }
 
 // handleSessionStart starts a session's tmux process

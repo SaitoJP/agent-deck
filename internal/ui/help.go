@@ -234,7 +234,7 @@ func (h *HelpOverlay) View() string {
 			items: [][2]string{
 				{newKeys, "New / quick create"},
 				{renameKey, "Rename session"},
-				{restartKey, "Restart session"},
+				{restartKey, "Resume session"},
 				{restartFreshKey, "Restart with new session ID"},
 				{deleteKey, "Delete session"},
 				{closeKey, "Close session process"},

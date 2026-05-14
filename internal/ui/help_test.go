@@ -47,6 +47,20 @@ func TestHelpOverlayShowsNotesShortcutWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestHelpOverlayShowsResumeSessionLabel(t *testing.T) {
+	enabled := true
+	setPreviewShowNotesConfigForTest(t, &enabled)
+
+	overlay := NewHelpOverlay()
+	overlay.SetSize(100, 80)
+	overlay.Show()
+
+	view := overlay.View()
+	if !strings.Contains(view, "Resume session") {
+		t.Fatalf("help overlay should describe R as resume, got %q", view)
+	}
+}
+
 func TestWrapWithHangingIndent_ShortText_NoWrap(t *testing.T) {
 	got := wrapWithHangingIndent("Short text", 40, "    ")
 	want := "Short text"
