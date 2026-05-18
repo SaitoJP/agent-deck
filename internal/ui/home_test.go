@@ -2590,6 +2590,45 @@ func TestRestartSessionFreshCmdSessionMissingReturnsError(t *testing.T) {
 	}
 }
 
+func TestSessionRestartedMsgAdoptsRestartedStateFromStalePointer(t *testing.T) {
+	home := NewHome()
+	home.storage = nil
+
+	current := session.NewInstanceWithTool("restart-current", "/tmp/project", "claude")
+	current.Status = session.StatusError
+	current.ClaudeSessionID = "old-session-id"
+	current.ClaudeDetectedAt = time.Now()
+
+	restarted := session.NewInstanceWithTool("restart-current", "/tmp/project", "claude")
+	restarted.ID = current.ID
+	restarted.Status = session.StatusWaiting
+
+	home.instancesMu.Lock()
+	home.instances = []*session.Instance{current}
+	home.instanceByID[current.ID] = current
+	home.instancesMu.Unlock()
+	home.groupTree = session.NewGroupTree(home.instances)
+
+	model, _ := home.Update(sessionRestartedMsg{
+		sessionID: current.ID,
+		instance:  restarted,
+		fresh:     true,
+	})
+
+	if _, ok := model.(*Home); !ok {
+		t.Fatalf("expected *Home model, got %T", model)
+	}
+	if got := current.GetStatusThreadSafe(); got == session.StatusError {
+		t.Fatalf("current status = %v, want non-error restart state", got)
+	}
+	if current.ClaudeSessionID != "" {
+		t.Fatalf("current ClaudeSessionID = %q, want empty", current.ClaudeSessionID)
+	}
+	if !current.ClaudeDetectedAt.IsZero() {
+		t.Fatalf("current ClaudeDetectedAt = %v, want zero", current.ClaudeDetectedAt)
+	}
+}
+
 func TestRebuildFlatItemsAutoClearsEmptyStatusFilter(t *testing.T) {
 	home := NewHome()
 	home.initialLoading = false

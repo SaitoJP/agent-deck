@@ -424,6 +424,67 @@ func (inst *Instance) SetStatusThreadSafe(s Status) {
 	inst.mu.Unlock()
 }
 
+// AdoptRestartStateFrom copies the restart-result state from src into inst.
+// This is used when an async restart finishes on a stale pointer that has since
+// been replaced by a storage reload.
+func (inst *Instance) AdoptRestartStateFrom(src *Instance) {
+	if inst == nil || src == nil || inst == src {
+		return
+	}
+
+	src.mu.RLock()
+	status := src.Status
+	tmuxSess := src.tmuxSession
+	claudeSessionID := src.ClaudeSessionID
+	claudeDetectedAt := src.ClaudeDetectedAt
+	geminiSessionID := src.GeminiSessionID
+	geminiDetectedAt := src.GeminiDetectedAt
+	opencodeSessionID := src.OpenCodeSessionID
+	opencodeDetectedAt := src.OpenCodeDetectedAt
+	codexSessionID := src.CodexSessionID
+	codexDetectedAt := src.CodexDetectedAt
+	copilotSessionID := src.CopilotSessionID
+	copilotDetectedAt := src.CopilotDetectedAt
+	hookStatus := src.hookStatus
+	hookEvent := src.hookEvent
+	hookSessionID := src.hookSessionID
+	hookLastUpdate := src.hookLastUpdate
+	suppressedHookSessionID := src.suppressedHookSessionID
+	suppressedHookSessionUntil := src.suppressedHookSessionUntil
+	lastErrorCheck := src.lastErrorCheck
+	lastIdleCheck := src.lastIdleCheck
+	lastKnownActivity := src.lastKnownActivity
+	lastStartTime := src.lastStartTime
+	lastSessionMetaSync := src.lastSessionMetaSync
+	src.mu.RUnlock()
+
+	inst.mu.Lock()
+	inst.Status = status
+	inst.tmuxSession = tmuxSess
+	inst.ClaudeSessionID = claudeSessionID
+	inst.ClaudeDetectedAt = claudeDetectedAt
+	inst.GeminiSessionID = geminiSessionID
+	inst.GeminiDetectedAt = geminiDetectedAt
+	inst.OpenCodeSessionID = opencodeSessionID
+	inst.OpenCodeDetectedAt = opencodeDetectedAt
+	inst.CodexSessionID = codexSessionID
+	inst.CodexDetectedAt = codexDetectedAt
+	inst.CopilotSessionID = copilotSessionID
+	inst.CopilotDetectedAt = copilotDetectedAt
+	inst.hookStatus = hookStatus
+	inst.hookEvent = hookEvent
+	inst.hookSessionID = hookSessionID
+	inst.hookLastUpdate = hookLastUpdate
+	inst.suppressedHookSessionID = suppressedHookSessionID
+	inst.suppressedHookSessionUntil = suppressedHookSessionUntil
+	inst.lastErrorCheck = lastErrorCheck
+	inst.lastIdleCheck = lastIdleCheck
+	inst.lastKnownActivity = lastKnownActivity
+	inst.lastStartTime = lastStartTime
+	inst.lastSessionMetaSync = lastSessionMetaSync
+	inst.mu.Unlock()
+}
+
 // GetToolThreadSafe returns the tool name with read-lock protection.
 func (inst *Instance) GetToolThreadSafe() string {
 	inst.mu.RLock()

@@ -4016,6 +4016,10 @@ func (h *Home) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			// Find the instance and refresh its MCP state (O(1) lookup)
 			if inst := h.getInstanceByID(msg.sessionID); inst != nil {
+				if msg.instance != nil && inst != msg.instance {
+					inst.AdoptRestartStateFrom(msg.instance)
+				}
+				_ = inst.UpdateStatus()
 				// Refresh the loaded MCPs to match the new config
 				inst.CaptureLoadedMCPs()
 			}
@@ -4025,7 +4029,7 @@ func (h *Home) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			h.instancesMu.Unlock()
 			h.invalidatePreviewCache(msg.sessionID)
 			// Save the updated session state (new tmux session name)
-			h.saveInstances()
+			h.forceSaveInstances()
 			if msg.warning != "" {
 				h.setError(fmt.Errorf("%s", msg.warning))
 			}
@@ -8808,6 +8812,7 @@ func (h *Home) bulkRemoveErrored() tea.Cmd {
 // sessionRestartedMsg signals that a session was restarted.
 type sessionRestartedMsg struct {
 	sessionID string
+	instance  *session.Instance
 	err       error
 	warning   string
 	fresh     bool
@@ -8846,6 +8851,7 @@ func (h *Home) restartSession(inst *session.Instance) tea.Cmd {
 		mcpUILog.Debug("restart_session_result", slog.String("id", id), slog.Any("error", err))
 		return sessionRestartedMsg{
 			sessionID: id,
+			instance:  current,
 			err:       err,
 			warning:   current.ConsumeCodexRestartWarning(),
 		}
@@ -8877,6 +8883,7 @@ func (h *Home) restartSessionFresh(inst *session.Instance) tea.Cmd {
 		mcpUILog.Debug("restart_session_fresh_result", slog.String("id", id), slog.Any("error", err))
 		return sessionRestartedMsg{
 			sessionID: id,
+			instance:  current,
 			err:       err,
 			warning:   current.ConsumeCodexRestartWarning(),
 			fresh:     true,
