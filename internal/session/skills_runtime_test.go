@@ -20,6 +20,7 @@ func TestProjectSkillsDirMapping(t *testing.T) {
 		{tool: "claude", wantDir: ".claude/skills", wantOK: true, wantRestart: true},
 		{tool: "gemini", wantDir: ".agents/skills", wantOK: true, wantRestart: true},
 		{tool: "codex", wantDir: ".agents/skills", wantOK: true, wantRestart: true},
+		{tool: "copilot", wantDir: ".agents/skills", wantOK: true, wantRestart: true},
 		{tool: "pi", wantDir: ".agents/skills", wantOK: true, wantRestart: false},
 		{tool: "shell", wantDir: "", wantOK: false, wantRestart: false},
 	}
@@ -77,6 +78,27 @@ func TestSkillRuntime_AttachUsesAgentSkillsDirForGemini(t *testing.T) {
 	projectPath := t.TempDir()
 
 	attachment, err := AttachSkillToProject(projectPath, "gemini", "my-skill", "local")
+	require.NoError(t, err)
+	require.Equal(t, ".agents/skills/my-skill", attachment.TargetPath)
+
+	_, err = os.Stat(filepath.Join(projectPath, ".agents", "skills", "my-skill", "SKILL.md"))
+	require.NoError(t, err)
+}
+
+func TestSkillRuntime_AttachUsesAgentSkillsDirForCopilot(t *testing.T) {
+	_, cleanup := setupSkillTestEnv(t)
+	defer cleanup()
+
+	sourcePath := t.TempDir()
+	writeSkillDir(t, sourcePath, "my-skill", "my-skill", "A test skill")
+
+	require.NoError(t, SaveSkillSources(map[string]SkillSourceDef{
+		"local": {Path: sourcePath, Enabled: boolPtr(true)},
+	}))
+
+	projectPath := t.TempDir()
+
+	attachment, err := AttachSkillToProject(projectPath, "copilot", "my-skill", "local")
 	require.NoError(t, err)
 	require.Equal(t, ".agents/skills/my-skill", attachment.TargetPath)
 

@@ -128,7 +128,7 @@ func SupportsProjectSkills(tool string) bool {
 // ShouldRestartProjectSkills reports whether agent-deck should auto-restart the session
 // after project skill changes for this runtime.
 func ShouldRestartProjectSkills(tool string) bool {
-	return IsClaudeCompatible(tool) || tool == "gemini" || tool == "codex"
+	return IsClaudeCompatible(tool) || tool == "gemini" || tool == "codex" || tool == "copilot"
 }
 
 // GetProjectSkillsDir returns the runtime-managed project skill directory.
@@ -136,7 +136,7 @@ func GetProjectSkillsDir(tool string) (string, bool) {
 	switch {
 	case IsClaudeCompatible(tool):
 		return projectClaudeSkillsDir, true
-	case tool == "gemini" || tool == "codex" || tool == "pi":
+	case tool == "gemini" || tool == "codex" || tool == "copilot" || tool == "pi":
 		return projectAgentsSkillsDir, true
 	default:
 		return "", false

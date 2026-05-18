@@ -127,13 +127,13 @@ Claude New Session defaults are remembered in `~/.agent-deck/config.toml` under 
 **Persistence:**
 - Writes attachment state to `<project>/.agent-deck/skills.toml`
 - Claude-compatible sessions materialize selected entries in `<project>/.claude/skills`
-- Gemini, Codex, and Pi sessions materialize selected entries in `<project>/.agents/skills`
+- Gemini, Codex, Copilot, and Pi sessions materialize selected entries in `<project>/.agents/skills`
 - If no pool entries exist, dialog shows guidance for `~/.agent-deck/skills/pool`
 
 **Runtime notes:**
-- Skills Manager is available for Claude, Gemini, Codex, and Pi sessions
+- Skills Manager is available for Claude, Gemini, Codex, Copilot, and Pi sessions
 - Pressing `Enter` reconciles managed attachments to the active runtime root even if the attached list did not change
-- Auto-restart after apply is supported for Claude, Gemini, and Codex; Pi requires manual reload/restart
+- Auto-restart after apply is supported for Claude, Gemini, Codex, and Copilot; Pi requires manual reload/restart
 
 ### Fork Dialog (`F`)
 

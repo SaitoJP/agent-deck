@@ -14,7 +14,7 @@ import (
 )
 
 func projectSkillsUnsupportedMessage() string {
-	return "project skills are supported for Claude, Gemini, Codex, and Pi sessions"
+	return "project skills are supported for Claude, Gemini, Codex, Copilot, and Pi sessions"
 }
 
 func restartProjectSkillsSession(inst *session.Instance, jsonOutput, quietMode bool) bool {
