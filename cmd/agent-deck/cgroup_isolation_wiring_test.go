@@ -84,19 +84,30 @@ func TestLogCgroupIsolationDecision_WiredIntoBootstrap(t *testing.T) {
 		if err := cmd.Start(); err != nil {
 			t.Fatalf("start binary: %v", err)
 		}
-		time.Sleep(2 * time.Second)
+		logPath := filepath.Join(tmpHome, ".agent-deck", "debug.log")
+		deadline := time.Now().Add(8 * time.Second)
+		found := false
+		var data []byte
+		for time.Now().Before(deadline) {
+			data, _ = os.ReadFile(logPath)
+			if strings.Contains(string(data), "tmux cgroup isolation:") {
+				found = true
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 		_, _ = cmd.Process.Wait()
 
 		// Allow lumberjack to flush after SIGTERM.
 		time.Sleep(200 * time.Millisecond)
 
-		logPath := filepath.Join(tmpHome, ".agent-deck", "debug.log")
 		data, err := os.ReadFile(logPath)
 		if err != nil {
 			t.Fatalf("OBS-01-WIRE-UP-MISSING: read debug.log at %s: %v", logPath, err)
 		}
-		if !strings.Contains(string(data), "tmux cgroup isolation:") {
+		if !found && !strings.Contains(string(data), "tmux cgroup isolation:") {
 			t.Fatalf("OBS-01-WIRE-UP-MISSING: debug.log at %s missing 'tmux cgroup isolation:' line; contents:\n%s", logPath, data)
 		}
 	})
