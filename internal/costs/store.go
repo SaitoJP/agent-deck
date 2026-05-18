@@ -60,7 +60,7 @@ func (s *Store) TotalToday() (CostSummary, error) {
 
 // TotalThisWeek returns this week's total costs (Monday start).
 func (s *Store) TotalThisWeek() (CostSummary, error) {
-	return s.querySum(`WHERE timestamp >= date('now', 'weekday 1', '-7 days')`)
+	return s.querySumSince(startOfISOWeekUTC(time.Now()))
 }
 
 // TotalThisMonth returns this month's total costs.
@@ -78,8 +78,9 @@ func (s *Store) TotalYesterday() (CostSummary, error) {
 // TotalLastWeek returns the prior ISO-week's total costs (Monday start),
 // mirroring the boundary semantics of TotalThisWeek.
 func (s *Store) TotalLastWeek() (CostSummary, error) {
-	return s.querySum(`WHERE timestamp >= date('now', 'weekday 1', '-14 days')
-		AND timestamp < date('now', 'weekday 1', '-7 days')`)
+	thisWeekStart := startOfISOWeekUTC(time.Now())
+	lastWeekStart := thisWeekStart.AddDate(0, 0, -7)
+	return s.querySumBetween(lastWeekStart, thisWeekStart)
 }
 
 // TotalLastMonth returns the prior calendar month's total costs.
@@ -260,6 +261,28 @@ func (s *Store) querySum(where string, args ...any) (CostSummary, error) {
 		&cs.EventCount,
 	)
 	return cs, err
+}
+
+func (s *Store) querySumSince(from time.Time) (CostSummary, error) {
+	return s.querySum(`WHERE timestamp >= ?`, from.UTC().Format(time.RFC3339))
+}
+
+func (s *Store) querySumBetween(from, to time.Time) (CostSummary, error) {
+	return s.querySum(
+		`WHERE timestamp >= ? AND timestamp < ?`,
+		from.UTC().Format(time.RFC3339),
+		to.UTC().Format(time.RFC3339),
+	)
+}
+
+func startOfISOWeekUTC(now time.Time) time.Time {
+	now = now.UTC()
+	weekday := int(now.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	monday := now.AddDate(0, 0, -(weekday - 1))
+	return time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 // DailyBySession returns daily costs for a specific session.
