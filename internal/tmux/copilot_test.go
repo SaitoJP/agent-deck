@@ -66,6 +66,16 @@ func TestCopilotBusyIndicator_MatchesEscToCancelFooter(t *testing.T) {
 	}
 }
 
+func TestCopilotBusyIndicator_MatchesEscCancelFooter(t *testing.T) {
+	s := NewSession("copilot-esc-cancel-new", "/tmp")
+	s.Command = "copilot"
+
+	content := "Thinking\nesc cancel\n"
+	if !s.hasBusyIndicator(content) {
+		t.Fatal("hasBusyIndicator() = false, want true when Copilot footer shows esc cancel")
+	}
+}
+
 func TestCopilotBusyIndicator_IgnoresEscToCancelInTranscript(t *testing.T) {
 	s := NewSession("copilot-esc-cancel-prose", "/tmp")
 	s.Command = "copilot"
@@ -97,6 +107,18 @@ func TestCopilotBusyIndicator_MatchesThinkingLineWithAnimatedPrefix(t *testing.T
 		content := symbol + " Thinking (Esc to cancel · 887 B)\n"
 		if !s.hasBusyIndicator(content) {
 			t.Fatalf("hasBusyIndicator() = false, want true for Copilot Thinking line with animated prefix %q", symbol)
+		}
+	}
+}
+
+func TestCopilotBusyIndicator_MatchesThinkingLineWithAnimatedPrefixAndEscCancel(t *testing.T) {
+	for _, symbol := range []string{"●", "◉", "◎", "○"} {
+		s := NewSession("copilot-thinking-prefix-new-"+symbol, "/tmp")
+		s.Command = "copilot"
+
+		content := symbol + " Thinking (esc cancel · 887 B)\n"
+		if !s.hasBusyIndicator(content) {
+			t.Fatalf("hasBusyIndicator() = false, want true for Copilot Thinking line with updated footer %q", symbol)
 		}
 	}
 }

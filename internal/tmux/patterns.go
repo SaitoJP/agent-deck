@@ -94,9 +94,10 @@ func DefaultRawPatterns(toolName string) *RawPatterns {
 		return &RawPatterns{
 			BusyPatterns: []string{
 				"esc to cancel",
+				"esc cancel",
 				"esc to interrupt",
 				"ctrl+c to interrupt",
-				`re:(?im)^(?:(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●◉◎○])\s+)?[^\n()]+\(\s*esc to cancel\s*·[^\n]*\)$`,
+				`re:(?im)^(?:(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●◉◎○])\s+)?[^\n()]+\(\s*esc(?:\s+to)?\s+cancel\s*·[^\n]*\)$`,
 				`re:(?im)^(?:(?:[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏●◉◎○])\s+)?thinking\b[^\n]*$`,
 				`re:(?m)^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s`,
 			},
