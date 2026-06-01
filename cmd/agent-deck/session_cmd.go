@@ -413,14 +413,133 @@ func handleSessionStop(profile string, args []string) {
 	})
 }
 
-// handleSessionRestart restarts a session (or all active sessions with --all)
+type restartAllAction string
+
+const (
+	restartAllActionRestart restartAllAction = "restart"
+	restartAllActionRecover restartAllAction = "recover"
+	restartAllActionSkipped restartAllAction = "skipped"
+
+	restartAllSkipReasonStopped      = "stopped"
+	restartAllSkipReasonNeverStarted = "never_started"
+)
+
+type restartAllTarget struct {
+	Instance *session.Instance
+	Action   restartAllAction
+}
+
+type restartAllResult struct {
+	ID      string
+	Title   string
+	Action  string
+	Success bool
+	Skipped bool
+	Reason  string
+	Error   string
+	Warning string
+}
+
+type RestartAllSummary struct {
+	Total     int
+	Restarted int
+	Recovered int
+	Skipped   int
+	Failed    int
+}
+
+func (s RestartAllSummary) Format() string {
+	return fmt.Sprintf(
+		"restarted=%d recovered=%d skipped=%d failed=%d total=%d",
+		s.Restarted, s.Recovered, s.Skipped, s.Failed, s.Total,
+	)
+}
+
+func hasRestartAllRecoveryState(inst *session.Instance) bool {
+	if inst == nil {
+		return false
+	}
+	if !inst.LastStartedAt.IsZero() {
+		return true
+	}
+	if inst.Status != session.StatusIdle {
+		return true
+	}
+	return inst.ClaudeSessionID != "" ||
+		inst.GeminiSessionID != "" ||
+		inst.OpenCodeSessionID != "" ||
+		inst.CodexSessionID != "" ||
+		inst.CopilotSessionID != ""
+}
+
+func selectRestartAllTargets(instances []*session.Instance, existsFn func(*session.Instance) bool) ([]restartAllTarget, []restartAllResult) {
+	var targets []restartAllTarget
+	var skipped []restartAllResult
+
+	for _, inst := range instances {
+		if existsFn(inst) {
+			targets = append(targets, restartAllTarget{
+				Instance: inst,
+				Action:   restartAllActionRestart,
+			})
+			continue
+		}
+		if inst.Status == session.StatusStopped {
+			skipped = append(skipped, restartAllResult{
+				ID:      inst.ID,
+				Title:   inst.Title,
+				Action:  string(restartAllActionSkipped),
+				Success: true,
+				Skipped: true,
+				Reason:  restartAllSkipReasonStopped,
+			})
+			continue
+		}
+		if !hasRestartAllRecoveryState(inst) {
+			skipped = append(skipped, restartAllResult{
+				ID:      inst.ID,
+				Title:   inst.Title,
+				Action:  string(restartAllActionSkipped),
+				Success: true,
+				Skipped: true,
+				Reason:  restartAllSkipReasonNeverStarted,
+			})
+			continue
+		}
+		targets = append(targets, restartAllTarget{
+			Instance: inst,
+			Action:   restartAllActionRecover,
+		})
+	}
+
+	return targets, skipped
+}
+
+func summarizeRestartAllResults(results []restartAllResult) RestartAllSummary {
+	summary := RestartAllSummary{Total: len(results)}
+	for _, result := range results {
+		switch {
+		case result.Skipped:
+			summary.Skipped++
+		case !result.Success:
+			summary.Failed++
+		case result.Action == string(restartAllActionRecover):
+			summary.Recovered++
+		default:
+			summary.Restarted++
+		}
+	}
+	return summary
+}
+
+// handleSessionRestart restarts a session (or all active/recoverable sessions with --all)
 func handleSessionRestart(profile string, args []string) {
 	fs := flag.NewFlagSet("session restart", flag.ExitOnError)
 	jsonOutput := fs.Bool("json", false, "Output as JSON")
 	quiet := fs.Bool("quiet", false, "Minimal output")
 	quietShort := fs.Bool("q", false, "Minimal output (short)")
 	force := fs.Bool("force", false, "Restart even if the session is already healthy and fresh (bypasses issue #30 guard)")
-	all := fs.Bool("all", false, "Restart all active sessions")
+	all := fs.Bool("all", false, "Restart all active sessions and recover dead tmux sessions that were previously started")
 
 	fs.Usage = func() {
 		fmt.Println("Usage: agent-deck session restart [id|title] [options]")
@@ -438,6 +557,7 @@ func handleSessionRestart(profile string, args []string) {
 		fmt.Println("Examples:")
 		fmt.Println("  agent-deck session restart my-project")
 		fmt.Println("  agent-deck session restart --all")
+		fmt.Println("    # also recovers previously-started sessions whose tmux died after a reboot")
 	}
 
 	if err := fs.Parse(normalizeArgs(fs, args)); err != nil {
@@ -529,31 +649,35 @@ func handleSessionRestart(profile string, args []string) {
 	out.Success(fmt.Sprintf("Restarted session: %s", inst.Title), data)
 }
 
-// restartAllSessions restarts every active session one by one.
+// restartAllSessions restarts every active session and recovers dead tmux
+// sessions that still have restartable state.
 func restartAllSessions(out *CLIOutput, storage *session.Storage, instances []*session.Instance, groups []*session.GroupData) {
-	var active []*session.Instance
-	for _, inst := range instances {
-		if inst.Exists() {
-			active = append(active, inst)
-		}
-	}
+	targets, skipped := selectRestartAllTargets(instances, func(inst *session.Instance) bool {
+		return inst.Exists()
+	})
 
-	if len(active) == 0 {
-		out.Error("no active sessions to restart", ErrCodeNotFound)
+	if len(targets) == 0 {
+		out.Error("no sessions to restart or recover", ErrCodeNotFound)
 		os.Exit(1)
 	}
 
-	var results []map[string]interface{}
-	var failed int
+	results := make([]restartAllResult, 0, len(targets)+len(skipped))
+	results = append(results, skipped...)
 
-	for _, inst := range active {
-		result := map[string]interface{}{
-			"id":    inst.ID,
-			"title": inst.Title,
+	for _, target := range targets {
+		inst := target.Instance
+		result := restartAllResult{
+			ID:     inst.ID,
+			Title:  inst.Title,
+			Action: string(target.Action),
 		}
 
 		if !out.jsonMode {
-			fmt.Printf("Restarting %s...\n", inst.Title)
+			verb := "Restarting"
+			if target.Action == restartAllActionRecover {
+				verb = "Recovering"
+			}
+			fmt.Printf("%s %s...\n", verb, inst.Title)
 		}
 
 		if err := inst.Restart(); err != nil {
@@ -561,9 +685,8 @@ func restartAllSessions(out *CLIOutput, storage *session.Storage, instances []*s
 			if !out.jsonMode {
 				fmt.Fprintf(os.Stderr, "  Error: %s\n", errMsg)
 			}
-			result["success"] = false
-			result["error"] = errMsg
-			failed++
+			result.Success = false
+			result.Error = errMsg
 			results = append(results, result)
 			continue
 		}
@@ -579,14 +702,18 @@ func restartAllSessions(out *CLIOutput, storage *session.Storage, instances []*s
 			inst.PostStartSync(3 * time.Second)
 		}
 
-		result["success"] = true
+		result.Success = true
 		if warning != "" {
-			result["warning"] = warning
+			result.Warning = warning
 		}
 		results = append(results, result)
 
 		if !out.jsonMode {
-			fmt.Printf("  Done: %s\n", inst.Title)
+			doneVerb := "Restarted"
+			if target.Action == restartAllActionRecover {
+				doneVerb = "Recovered"
+			}
+			fmt.Printf("  %s: %s\n", doneVerb, inst.Title)
 		}
 	}
 
@@ -596,23 +723,43 @@ func restartAllSessions(out *CLIOutput, storage *session.Storage, instances []*s
 		os.Exit(1)
 	}
 
-	if out.jsonMode {
-		out.Success("", map[string]interface{}{
-			"success":   failed == 0,
-			"total":     len(active),
-			"restarted": len(active) - failed,
-			"failed":    failed,
-			"sessions":  results,
-		})
-	} else if !out.quietMode {
-		fmt.Printf("Restarted %d/%d sessions", len(active)-failed, len(active))
-		if failed > 0 {
-			fmt.Printf(" (%d failed)", failed)
+	summary := summarizeRestartAllResults(results)
+	jsonSessions := make([]map[string]interface{}, 0, len(results))
+	for _, result := range results {
+		item := map[string]interface{}{
+			"id":      result.ID,
+			"title":   result.Title,
+			"action":  result.Action,
+			"success": result.Success,
 		}
-		fmt.Println()
+		if result.Skipped {
+			item["skipped"] = true
+			item["reason"] = result.Reason
+		}
+		if result.Error != "" {
+			item["error"] = result.Error
+		}
+		if result.Warning != "" {
+			item["warning"] = result.Warning
+		}
+		jsonSessions = append(jsonSessions, item)
 	}
 
-	if failed > 0 {
+	if out.jsonMode {
+		out.Success("", map[string]interface{}{
+			"success":   summary.Failed == 0,
+			"total":     summary.Total,
+			"restarted": summary.Restarted,
+			"recovered": summary.Recovered,
+			"skipped":   summary.Skipped,
+			"failed":    summary.Failed,
+			"sessions":  jsonSessions,
+		})
+	} else if !out.quietMode {
+		fmt.Printf("Processed %d sessions: %s\n", summary.Total, summary.Format())
+	}
+
+	if summary.Failed > 0 {
 		os.Exit(1)
 	}
 }
