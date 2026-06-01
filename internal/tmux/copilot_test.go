@@ -43,6 +43,30 @@ func TestDefaultRawPatterns_Copilot(t *testing.T) {
 	}
 }
 
+func TestSessionShouldEnableExtendedKeys_CopilotDisabled(t *testing.T) {
+	s := NewSession("copilot-extkeys", "/tmp")
+	s.Command = "copilot --resume"
+	if s.shouldEnableExtendedKeys() {
+		t.Fatal("shouldEnableExtendedKeys() = true, want false for copilot")
+	}
+}
+
+func TestSessionShouldEnableExtendedKeys_NpxCopilotDisabled(t *testing.T) {
+	s := NewSession("copilot-npx-extkeys", "/tmp")
+	s.Command = "npx @github/copilot"
+	if s.shouldEnableExtendedKeys() {
+		t.Fatal("shouldEnableExtendedKeys() = true, want false for npx @github/copilot")
+	}
+}
+
+func TestSessionShouldEnableExtendedKeys_ClaudeEnabled(t *testing.T) {
+	s := NewSession("claude-extkeys", "/tmp")
+	s.Command = "claude"
+	if !s.shouldEnableExtendedKeys() {
+		t.Fatal("shouldEnableExtendedKeys() = false, want true for non-copilot tools")
+	}
+}
+
 func TestCopilotBusyIndicator_DoesNotMatchRunningWordInPromptTranscript(t *testing.T) {
 	s := NewSession("copilot-running-word", "/tmp")
 	s.Command = "copilot"

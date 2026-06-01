@@ -629,6 +629,10 @@ func detectToolFromCommand(command string) string {
 	}
 }
 
+func (s *Session) shouldEnableExtendedKeys() bool {
+	return detectToolFromCommand(s.Command) != "copilot"
+}
+
 func detectToolFromContent(cleanContent string) string {
 	for _, tool := range toolDetectionOrder {
 		patterns, ok := toolDetectionPatterns[tool]
@@ -1894,9 +1898,15 @@ func (s *Session) Start(command string) error {
 	startArgs = append(startArgs,
 		"set-option", "-t", s.Name, "-q", "allow-passthrough", "on", ";",
 		"set-option", "-t", s.Name, "set-clipboard", "on", ";",
-		"set-option", "-t", s.Name, "escape-time", "10", ";",
-		"set", "-sq", "extended-keys", "on", ";",
-		"set", "-asq", "terminal-features", ",*:hyperlinks:extkeys")
+		"set-option", "-t", s.Name, "escape-time", "10", ";")
+	if s.shouldEnableExtendedKeys() {
+		startArgs = append(startArgs,
+			"set", "-sq", "extended-keys", "on", ";",
+			"set", "-asq", "terminal-features", ",*:hyperlinks:extkeys")
+	} else {
+		startArgs = append(startArgs,
+			"set-option", "-t", s.Name, "-q", "extended-keys", "off")
+	}
 	// Multi-client size negotiation. Web's xterm.js connects via a tmux -C
 	// control client (controlpipe.go) at the same time as native `tmux attach`
 	// clients (Ghostty, iTerm). Default `window-size latest` makes the window
@@ -2166,12 +2176,20 @@ func (s *Session) EnableMouseMode() error {
 	// - escape-time 10: Fast Vim/editor responsiveness (default 500ms is too slow)
 	//
 	// Uses -q flag where supported to silently ignore on older tmux versions
-	enhanceCmd := s.tmuxCmd(
+	enhanceArgs := []string{
 		"set-option", "-t", s.Name, "set-clipboard", "on", ";",
 		"set-option", "-t", s.Name, "-q", "allow-passthrough", "on", ";",
 		"set-option", "-t", s.Name, "escape-time", "10", ";",
-		"set", "-sq", "extended-keys", "on", ";",
-		"set", "-asq", "terminal-features", ",*:hyperlinks:extkeys")
+	}
+	if s.shouldEnableExtendedKeys() {
+		enhanceArgs = append(enhanceArgs,
+			"set", "-sq", "extended-keys", "on", ";",
+			"set", "-asq", "terminal-features", ",*:hyperlinks:extkeys")
+	} else {
+		enhanceArgs = append(enhanceArgs,
+			"set-option", "-t", s.Name, "-q", "extended-keys", "off")
+	}
+	enhanceCmd := s.tmuxCmd(enhanceArgs...)
 	// Ignore errors - all these are non-fatal enhancements
 	// Older tmux versions may not support some options
 	_ = enhanceCmd.Run()
