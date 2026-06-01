@@ -788,6 +788,9 @@ func TestInstallSharedConductorInstructions_CodexDefault(t *testing.T) {
 	if !strings.Contains(string(content), "agent-deck -p <PROFILE> add <path> -t \"Title\" -c codex") {
 		t.Fatal("AGENTS.md should render codex session examples")
 	}
+	if !strings.Contains(string(content), ConductorRoleInstructionsFileName) {
+		t.Fatalf("AGENTS.md should reference %s", ConductorRoleInstructionsFileName)
+	}
 }
 
 func TestInstallSharedConductorInstructions_AgentsCoexist(t *testing.T) {
@@ -824,6 +827,9 @@ func TestInstallSharedConductorInstructions_CopilotKeepsSharedClaudeMDGeneric(t 
 	}
 	if !strings.Contains(string(before), "agent-deck -p <PROFILE> add <path> -t \"Title\" -c <tool>") {
 		t.Fatal("shared CLAUDE.md should use agent-neutral session examples")
+	}
+	if !strings.Contains(string(before), ConductorRoleInstructionsFileName) {
+		t.Fatalf("shared CLAUDE.md should reference %s", ConductorRoleInstructionsFileName)
 	}
 
 	if err := InstallSharedConductorInstructions(ConductorAgentCopilot, ""); err != nil {
@@ -875,6 +881,9 @@ func TestSetupConductor_DefaultTemplate(t *testing.T) {
 	if !strings.Contains(string(content), "POLICY.md") {
 		t.Error("per-conductor CLAUDE.md should reference POLICY.md")
 	}
+	if !strings.Contains(string(content), ConductorRoleInstructionsFileName) {
+		t.Fatalf("per-conductor CLAUDE.md should reference %s", ConductorRoleInstructionsFileName)
+	}
 
 	// Verify meta.json does NOT contain ClaudeMDPath field
 	meta, err := LoadConductorMeta(name)
@@ -907,6 +916,9 @@ func TestSetupConductorWithAgent_Codex(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "Codex") {
 		t.Fatal("AGENTS.md should mention Codex")
+	}
+	if !strings.Contains(string(content), ConductorRoleInstructionsFileName) {
+		t.Fatalf("AGENTS.md should reference %s", ConductorRoleInstructionsFileName)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "CLAUDE.md")); !os.IsNotExist(err) {
 		t.Fatal("CLAUDE.md should not be created for Codex conductor")
@@ -942,6 +954,9 @@ func TestSetupConductorWithAgent_Copilot(t *testing.T) {
 	if !strings.Contains(string(content), "GitHub Copilot CLI") {
 		t.Fatal("CLAUDE.md should mention GitHub Copilot CLI")
 	}
+	if !strings.Contains(string(content), ConductorRoleInstructionsFileName) {
+		t.Fatalf("CLAUDE.md should reference %s", ConductorRoleInstructionsFileName)
+	}
 	if _, err := os.Stat(filepath.Join(dir, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatal("AGENTS.md should not be created for Copilot conductor")
 	}
@@ -955,6 +970,249 @@ func TestSetupConductorWithAgent_Copilot(t *testing.T) {
 	}
 	if meta.GetClearOnCompact() {
 		t.Fatal("copilot conductor should not enable clear_on_compact")
+	}
+}
+
+func TestPrepareConductorRoleInstructionsForStart_BackfillsLegacyRoleInstructions(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	name := "backfill-role"
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCopilot, true, true, "copilot conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	inst := &Instance{
+		ID:               "conductor-backfill-role",
+		Title:            ConductorSessionTitle(name),
+		Tool:             "copilot",
+		IsConductor:      true,
+		RoleInstructions: "# Role\n\nUse terse status updates.",
+	}
+
+	if err := PrepareConductorRoleInstructionsForStart(inst); err != nil {
+		t.Fatalf("PrepareConductorRoleInstructionsForStart() error = %v", err)
+	}
+
+	path, err := ConductorRoleInstructionsPath(name)
+	if err != nil {
+		t.Fatalf("ConductorRoleInstructionsPath() error = %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read role instructions overlay: %v", err)
+	}
+	if got := string(content); got != inst.RoleInstructions {
+		t.Fatalf("role instructions overlay = %q, want %q", got, inst.RoleInstructions)
+	}
+}
+
+func TestPrepareConductorRoleInstructionsForStart_LegacyWithoutMetaDoesNotFail(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	inst := &Instance{
+		ID:               "legacy-conductor",
+		Title:            ConductorSessionTitle("legacy-no-meta"),
+		Tool:             "copilot",
+		IsConductor:      true,
+		RoleInstructions: "# Role\n\nStill works.",
+	}
+
+	if err := PrepareConductorRoleInstructionsForStart(inst); err != nil {
+		t.Fatalf("PrepareConductorRoleInstructionsForStart() error = %v", err)
+	}
+
+	got, err := ReadConductorRoleInstructions("legacy-no-meta")
+	if err != nil {
+		t.Fatalf("ReadConductorRoleInstructions() error = %v", err)
+	}
+	if got != inst.RoleInstructions {
+		t.Fatalf("role instructions overlay = %q, want %q", got, inst.RoleInstructions)
+	}
+}
+
+func TestPrepareConductorRoleInstructionsForStart_RefreshesLegacyManagedTemplates(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	name := "refresh-role-overlay"
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCopilot, true, true, "copilot conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	spec, err := GetConductorAgentSpec(ConductorAgentCopilot)
+	if err != nil {
+		t.Fatalf("GetConductorAgentSpec() error = %v", err)
+	}
+	baseDir, err := ConductorDir()
+	if err != nil {
+		t.Fatalf("ConductorDir() error = %v", err)
+	}
+	dir, err := ConductorNameDir(name)
+	if err != nil {
+		t.Fatalf("ConductorNameDir() error = %v", err)
+	}
+	legacyShared := renderConductorInstructionsTemplate(legacySharedConductorInstructionsTemplate(), "", DefaultProfile, ConductorAgentSpec{
+		Agent:                "<tool>",
+		DisplayName:          "agent",
+		InstructionsFileName: spec.InstructionsFileName,
+	})
+	legacyPer := renderConductorInstructionsTemplate(conductorPerNameClaudeMDPreLearningsTemplate, name, DefaultProfile, spec)
+	if err := os.WriteFile(filepath.Join(baseDir, spec.InstructionsFileName), []byte(legacyShared), 0o644); err != nil {
+		t.Fatalf("failed to seed legacy shared instructions: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, spec.InstructionsFileName), []byte(legacyPer), 0o644); err != nil {
+		t.Fatalf("failed to seed legacy conductor instructions: %v", err)
+	}
+
+	inst := &Instance{Title: ConductorSessionTitle(name), Tool: "copilot", IsConductor: true}
+	if err := PrepareConductorRoleInstructionsForStart(inst); err != nil {
+		t.Fatalf("PrepareConductorRoleInstructionsForStart() error = %v", err)
+	}
+
+	sharedContent, err := os.ReadFile(filepath.Join(baseDir, spec.InstructionsFileName))
+	if err != nil {
+		t.Fatalf("failed to read shared instructions: %v", err)
+	}
+	if !strings.Contains(string(sharedContent), ConductorRoleInstructionsFileName) {
+		t.Fatalf("shared instructions should reference %s after refresh", ConductorRoleInstructionsFileName)
+	}
+
+	perContent, err := os.ReadFile(filepath.Join(dir, spec.InstructionsFileName))
+	if err != nil {
+		t.Fatalf("failed to read conductor instructions: %v", err)
+	}
+	if !strings.Contains(string(perContent), ConductorRoleInstructionsFileName) {
+		t.Fatalf("per-conductor instructions should reference %s after refresh", ConductorRoleInstructionsFileName)
+	}
+}
+
+func TestPrepareConductorRoleInstructionsForStart_PreservesCustomizedSharedInstructions(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	name := "preserve-custom-shared"
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCopilot, true, true, "copilot conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	spec, err := GetConductorAgentSpec(ConductorAgentCopilot)
+	if err != nil {
+		t.Fatalf("GetConductorAgentSpec() error = %v", err)
+	}
+	baseDir, err := ConductorDir()
+	if err != nil {
+		t.Fatalf("ConductorDir() error = %v", err)
+	}
+	sharedPath := filepath.Join(baseDir, spec.InstructionsFileName)
+	customContent := "# Shared custom instructions\n\nDo not overwrite me.\n"
+	if err := os.WriteFile(sharedPath, []byte(customContent), 0o644); err != nil {
+		t.Fatalf("failed to seed custom shared instructions: %v", err)
+	}
+
+	inst := &Instance{Title: ConductorSessionTitle(name), Tool: "copilot", IsConductor: true}
+	if err := PrepareConductorRoleInstructionsForStart(inst); err != nil {
+		t.Fatalf("PrepareConductorRoleInstructionsForStart() error = %v", err)
+	}
+
+	got, err := os.ReadFile(sharedPath)
+	if err != nil {
+		t.Fatalf("failed to read shared instructions: %v", err)
+	}
+	if string(got) != customContent {
+		t.Fatalf("shared instructions were overwritten: got %q want %q", string(got), customContent)
+	}
+}
+
+func TestSetupConductorWithAgent_PreservesRoleInstructionsOverlay(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	name := "preserve-role-overlay"
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCopilot, true, true, "copilot conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := WriteConductorRoleInstructions(name, "# Role\n\nPersist this."); err != nil {
+		t.Fatalf("WriteConductorRoleInstructions() error = %v", err)
+	}
+
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCopilot, true, true, "copilot conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("unexpected error on rerun: %v", err)
+	}
+
+	got, err := ReadConductorRoleInstructions(name)
+	if err != nil {
+		t.Fatalf("ReadConductorRoleInstructions() error = %v", err)
+	}
+	if got != "# Role\n\nPersist this." {
+		t.Fatalf("role instructions overlay = %q, want %q", got, "# Role\n\nPersist this.")
+	}
+}
+
+func TestSetupConductorWithAgent_PreservesRoleInstructionsOverlayAcrossAgentSwitch(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	name := "switch-role-overlay"
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentClaude, true, true, "claude conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := WriteConductorRoleInstructions(name, "# Role\n\nStay intact."); err != nil {
+		t.Fatalf("WriteConductorRoleInstructions() error = %v", err)
+	}
+
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCodex, true, true, "codex conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("unexpected error on agent switch: %v", err)
+	}
+
+	got, err := ReadConductorRoleInstructions(name)
+	if err != nil {
+		t.Fatalf("ReadConductorRoleInstructions() error = %v", err)
+	}
+	if got != "# Role\n\nStay intact." {
+		t.Fatalf("role instructions overlay = %q, want %q", got, "# Role\n\nStay intact.")
+	}
+}
+
+func TestSetField_RoleInstructions_UpdatesConductorOverlay(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	name := "set-field-role"
+	if err := SetupConductorWithAgent(name, "default", ConductorAgentCopilot, true, true, "copilot conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := WriteConductorRoleInstructions(name, "# Role\n\nold"); err != nil {
+		t.Fatalf("WriteConductorRoleInstructions() error = %v", err)
+	}
+
+	inst := &Instance{
+		Title:            ConductorSessionTitle(name),
+		Tool:             "copilot",
+		IsConductor:      true,
+		RoleInstructions: "# Role\n\nold",
+	}
+	oldValue, postCommit, err := SetField(inst, FieldRoleInstructions, "# Role\n\nnew", nil)
+	if err != nil {
+		t.Fatalf("SetField() error = %v", err)
+	}
+	if oldValue != "# Role\n\nold" {
+		t.Fatalf("oldValue = %q, want %q", oldValue, "# Role\n\nold")
+	}
+	if postCommit != nil {
+		t.Fatal("SetField(role-instructions) should not require post-commit work")
+	}
+
+	got, err := ReadConductorRoleInstructions(name)
+	if err != nil {
+		t.Fatalf("ReadConductorRoleInstructions() error = %v", err)
+	}
+	if got != "# Role\n\nnew" {
+		t.Fatalf("role instructions overlay = %q, want %q", got, "# Role\n\nnew")
+	}
+	if inst.RoleInstructions != "# Role\n\nnew" {
+		t.Fatalf("session role instructions = %q, want %q", inst.RoleInstructions, "# Role\n\nnew")
 	}
 }
 

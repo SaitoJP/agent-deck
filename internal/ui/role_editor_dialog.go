@@ -49,12 +49,12 @@ func NewRoleEditorDialog() *RoleEditorDialog {
 	return &RoleEditorDialog{editor: ta}
 }
 
-func (d *RoleEditorDialog) Show(inst *session.Instance) {
+func (d *RoleEditorDialog) Show(inst *session.Instance, value string) {
 	d.visible = true
 	d.sessionID = inst.ID
 	d.sessionTitle = inst.Title
 	d.groupName = displayGroupName(inst.GroupPath)
-	d.editor.SetValue(inst.RoleInstructions)
+	d.editor.SetValue(value)
 	d.editor.Focus()
 }
 

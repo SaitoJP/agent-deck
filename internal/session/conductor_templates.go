@@ -1,5 +1,16 @@
 package session
 
+const conductorRoleInstructionsOverlayChecklist = `
+3. Read ` + "`" + `./ROLE_INSTRUCTIONS.md` + "`" + ` if it exists (apply TUI-edited per-conductor guidance)`
+
+const sharedConductorRoleInstructionsOverlaySection = `
+## Role Instructions Overlay
+
+If ` + "`" + `./ROLE_INSTRUCTIONS.md` + "`" + ` exists, read it at startup and before responding.
+It is the mutable per-conductor role overlay edited from the agent-deck TUI.
+Treat it as additional conductor-specific operating guidance that complements ` + "`" + `POLICY.md` + "`" + `.
+`
+
 // conductorSharedClaudeMDTemplate is the shared instructions file written to
 // ~/.agent-deck/conductor/<instructions-file> for the selected conductor agent.
 // It contains CLI reference, protocols, and formats shared by all conductors (mechanism).
@@ -100,6 +111,8 @@ Maintain ` + "`" + `./state.json` + "`" + ` for persistent context across compac
 ` + "```" + `
 
 Read state.json at the start of each interaction. Update it after taking action. Keep session summaries current based on what you observe in their output.
+
+` + sharedConductorRoleInstructionsOverlaySection + `
 
 ## Task Log
 
@@ -286,11 +299,12 @@ When you first start (or after a restart):
 
 1. Read ` + "`" + `./state.json` + "`" + ` if it exists (restore context)
 2. Read ` + "`" + `./LEARNINGS.md` + "`" + ` and ` + "`" + `../LEARNINGS.md` + "`" + ` if they exist (review past patterns)
-3. Run ` + "`" + `agent-deck -p {PROFILE} status --json` + "`" + ` to get the current state
-4. Run ` + "`" + `agent-deck -p {PROFILE} list --json` + "`" + ` to know what sessions exist
-5. Log startup in ` + "`" + `./task-log.md` + "`" + `
-6. If any sessions are in error state (NOT stopped), try to restart them. Sessions in "stopped" status were intentionally closed by the user and must NOT be restarted.
-7. Reply: "Conductor {NAME} ({PROFILE}) online. N sessions tracked (X running, Y waiting)."
+` + conductorRoleInstructionsOverlayChecklist + `
+4. Run ` + "`" + `agent-deck -p {PROFILE} status --json` + "`" + ` to get the current state
+5. Run ` + "`" + `agent-deck -p {PROFILE} list --json` + "`" + ` to know what sessions exist
+6. Log startup in ` + "`" + `./task-log.md` + "`" + `
+7. If any sessions are in error state (NOT stopped), try to restart them. Sessions in "stopped" status were intentionally closed by the user and must NOT be restarted.
+8. Reply: "Conductor {NAME} ({PROFILE}) online. N sessions tracked (X running, Y waiting)."
 
 ## Policy
 

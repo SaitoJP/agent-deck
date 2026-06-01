@@ -5403,8 +5403,13 @@ func (h *Home) beginRoleEditing(inst *session.Instance) {
 	if inst == nil {
 		return
 	}
+	value, err := session.ReadPersistentRoleInstructions(inst)
+	if err != nil {
+		h.setError(err)
+		return
+	}
 	h.roleEditorDialog.SetSize(h.width, h.height)
-	h.roleEditorDialog.Show(inst)
+	h.roleEditorDialog.Show(inst, value)
 }
 
 func (h *Home) handleRoleEditorDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -5420,7 +5425,7 @@ func (h *Home) handleRoleEditorDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return h, nil
 		}
 		h.instancesMu.Lock()
-		_, _, err := session.SetField(inst, session.FieldRoleInstructions, h.roleEditorDialog.Value(), nil)
+		err := session.SavePersistentRoleInstructions(inst, h.roleEditorDialog.Value())
 		h.instancesMu.Unlock()
 		if err != nil {
 			h.setError(err)

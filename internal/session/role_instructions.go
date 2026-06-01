@@ -10,6 +10,9 @@ func (i *Instance) ShouldBootstrapRoleInstructions() bool {
 	if i == nil || strings.TrimSpace(i.RoleInstructions) == "" {
 		return false
 	}
+	if isFileBackedConductor(i) {
+		return false
+	}
 
 	switch {
 	case IsClaudeCompatible(i.Tool):

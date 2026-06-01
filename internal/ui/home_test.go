@@ -943,6 +943,63 @@ func TestHandleRoleEditorKeySave(t *testing.T) {
 	}
 }
 
+func TestHandleRoleEditorKeySave_ConductorPersistsOverlay(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	name := "save-role-conductor"
+	if err := session.SetupConductorWithAgent(name, "default", session.ConductorAgentCopilot, true, true, "copilot conductor", "", "", "", nil, ""); err != nil {
+		t.Fatalf("SetupConductorWithAgent() error = %v", err)
+	}
+
+	home := NewHome()
+	home.width = 120
+	home.height = 40
+	home.storage = nil
+
+	inst := &session.Instance{
+		ID:               "session-save-role-conductor",
+		Title:            session.ConductorSessionTitle(name),
+		Tool:             "copilot",
+		GroupPath:        "engineering",
+		IsConductor:      true,
+		RoleInstructions: "before",
+	}
+	home.flatItems = []session.Item{{Type: session.ItemTypeSession, Session: inst}}
+	home.cursor = 0
+	home.instanceByID[inst.ID] = inst
+
+	if err := session.WriteConductorRoleInstructions(name, "# Role\n\nfrom overlay"); err != nil {
+		t.Fatalf("WriteConductorRoleInstructions() error = %v", err)
+	}
+
+	home.beginRoleEditing(inst)
+	if got := home.roleEditorDialog.Value(); got != "# Role\n\nfrom overlay" {
+		t.Fatalf("role editor loaded %q, want overlay content", got)
+	}
+
+	home.roleEditorDialog.editor.SetValue("# Role\n\nupdated")
+	model, _ := home.handleRoleEditorDialogKey(tea.KeyMsg{Type: tea.KeyCtrlS})
+	h, ok := model.(*Home)
+	if !ok {
+		t.Fatal("handleRoleEditorDialogKey should return *Home")
+	}
+
+	got, err := session.ReadConductorRoleInstructions(name)
+	if err != nil {
+		t.Fatalf("ReadConductorRoleInstructions() error = %v", err)
+	}
+	if got != "# Role\n\nupdated" {
+		t.Fatalf("conductor role instructions = %q, want %q", got, "# Role\n\nupdated")
+	}
+	if inst.RoleInstructions != "# Role\n\nupdated" {
+		t.Fatalf("session role instructions = %q, want mirrored value", inst.RoleInstructions)
+	}
+	if h.roleEditorDialog.IsVisible() {
+		t.Fatal("role editor should close after save")
+	}
+}
+
 func TestHandleEditSessionDialogKeySave_CopilotModel(t *testing.T) {
 	home := NewHome()
 	home.width = 120

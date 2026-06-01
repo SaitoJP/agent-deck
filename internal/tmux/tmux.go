@@ -373,7 +373,7 @@ func sessionActivityFromCache(name string) (int64, bool) {
 // IsTmuxAvailable checks if tmux is installed and accessible
 // Returns nil if tmux is available, otherwise returns an error with details
 func IsTmuxAvailable() error {
-	cmd := exec.Command("tmux", "-V")
+	cmd := tmuxVersionCmd()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tmux not found or not working: %w (output: %s)", err, string(output))

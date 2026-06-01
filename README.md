@@ -327,6 +327,7 @@ Each conductor gets its own directory, identity, and settings:
 ├── bridge.py           # Bridge daemon (Telegram/Slack, if configured)
 ├── ops/
 │   ├── CLAUDE.md       # Identity + startup checklist for this conductor
+│   ├── ROLE_INSTRUCTIONS.md  # Optional TUI-edited role overlay for this conductor
 │   ├── meta.json       # Config: name, profile, description, env vars
 │   ├── state.json      # Runtime state
 │   └── task-log.md     # Action log
@@ -335,7 +336,7 @@ Each conductor gets its own directory, identity, and settings:
     └── meta.json
 ```
 
-Claude and Copilot conductors use `CLAUDE.md`. Codex conductors use `AGENTS.md`. Shared `POLICY.md` and `LEARNINGS.md` remain agent-neutral. For Copilot conductors, agent-deck starts `copilot` with a bootstrap prompt that tells it to read `./CLAUDE.md` and `../CLAUDE.md`.
+Claude and Copilot conductors use `CLAUDE.md`. Codex conductors use `AGENTS.md`. Shared `POLICY.md` and `LEARNINGS.md` remain agent-neutral. `shift+i` in the TUI stores conductor-specific role text in `./ROLE_INSTRUCTIONS.md`, which managed conductor instructions read at startup. For Copilot conductors, agent-deck starts `copilot` with a bootstrap prompt that tells it to read `./CLAUDE.md` and `../CLAUDE.md`.
 
 Copilot conductor defaults can be set in `~/.agent-deck/config.toml`:
 

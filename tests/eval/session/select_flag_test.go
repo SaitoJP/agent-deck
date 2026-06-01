@@ -13,11 +13,13 @@
 package session_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/asheshgoplani/agent-deck/tests/eval/harness"
 )
@@ -69,12 +71,16 @@ func TestEval_SelectFlag_GroupScopeWarning(t *testing.T) {
 // lands before bubbletea initialization.
 func runBinStderrShort(t *testing.T, sb *harness.Sandbox, args ...string) string {
 	t.Helper()
-	cmd := exec.Command(sb.BinPath, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, sb.BinPath, args...)
 	cmd.Env = sb.Env()
 	cmd.Dir = sb.Home
 	// CombinedOutput is enough: the warning goes to stderr and the TUI
 	// errors (no tty, etc.) come after it, so the Warning line appears
-	// early in the combined stream and our substring check is robust.
+	// early in the combined stream and our substring check is robust. If the
+	// binary keeps running into TUI startup, the context stops it after the
+	// pre-TUI stderr has had time to arrive.
 	out, _ := cmd.CombinedOutput()
 	return string(out)
 }

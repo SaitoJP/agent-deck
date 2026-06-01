@@ -33,3 +33,27 @@ func TestComposeStartupMessage_FreshWithoutInitialMessageUsesRoleOnly(t *testing
 		t.Fatalf("ComposeStartupMessage() = %q, want %q", got, "You are the release manager.")
 	}
 }
+
+func TestComposeStartupMessage_FreshConductorSkipsSessionRoleBootstrap(t *testing.T) {
+	inst := NewInstanceWithTool("conductor-role", "/tmp/conductor-role", "copilot")
+	inst.IsConductor = true
+	inst.Title = "conductor-ops"
+	inst.RoleInstructions = "Persistent role"
+
+	got := inst.ComposeStartupMessage("Continue.")
+	if got != "Continue." {
+		t.Fatalf("ComposeStartupMessage() = %q, want %q", got, "Continue.")
+	}
+}
+
+func TestComposeStartupMessage_FreshCodexConductorSkipsSessionRoleBootstrap(t *testing.T) {
+	inst := NewInstanceWithTool("conductor-role-codex", "/tmp/conductor-role-codex", "codex")
+	inst.IsConductor = true
+	inst.Title = "conductor-release"
+	inst.RoleInstructions = "Persistent role"
+
+	got := inst.ComposeStartupMessage("")
+	if got != "" {
+		t.Fatalf("ComposeStartupMessage() = %q, want empty string", got)
+	}
+}

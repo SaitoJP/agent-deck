@@ -124,8 +124,13 @@ func SetField(inst *Instance, field, value string, extraArgsTokens []string) (ol
 		inst.Notes = value
 
 	case FieldRoleInstructions:
-		oldValue = inst.RoleInstructions
-		inst.RoleInstructions = value
+		oldValue, err = ReadPersistentRoleInstructions(inst)
+		if err != nil {
+			return oldValue, nil, err
+		}
+		if err := SavePersistentRoleInstructions(inst, value); err != nil {
+			return oldValue, nil, err
+		}
 
 	case FieldColor:
 		oldValue = inst.Color

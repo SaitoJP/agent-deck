@@ -40,6 +40,7 @@ type Sandbox struct {
 	// tmuxSock is a per-sandbox tmux socket path. Lazy-initialized by
 	// TmuxSocket(); the tmux server is killed on cleanup.
 	tmuxSock string
+	tmuxDir  string
 }
 
 // NewSandbox returns a Sandbox bound to t. All resources are released via
@@ -84,6 +85,7 @@ func (s *Sandbox) Env() []string {
 		"TERM=dumb",
 		"AGENTDECK_COLOR=none",
 		"NO_COLOR=1",
+		"AGENTDECK_SUPPRESS_TMUX_WARNING=1",
 		// Let the binary find tmux; we do NOT shim tmux — we use the real
 		// binary against a per-sandbox socket. See TmuxSocket().
 		"AGENT_DECK_TMUX_SOCKET=" + s.TmuxSocket(),
@@ -100,9 +102,27 @@ func (s *Sandbox) Env() []string {
 // TmuxSocket returns the path to this sandbox's tmux socket. Lazy-created.
 func (s *Sandbox) TmuxSocket() string {
 	if s.tmuxSock == "" {
-		s.tmuxSock = filepath.Join(s.t.TempDir(), "tmux.sock")
+		socketPath, cleanup := shortTmuxSocketPath()
+		s.tmuxSock = socketPath
+		s.tmuxDir = filepath.Dir(socketPath)
+		s.t.Cleanup(cleanup)
 	}
 	return s.tmuxSock
+}
+
+func shortTmuxSocketPath() (string, func()) {
+	// macOS rejects long tmux socket paths under /var/folders/...; pin eval
+	// sockets under /tmp so real-tmux behavioral tests stay within UNIX limits.
+	dir, err := os.MkdirTemp("/tmp", "ad-eval-tmux-")
+	if err != nil {
+		dir, err = os.MkdirTemp("", "ad-eval-tmux-")
+		if err != nil {
+			panic(fmt.Errorf("create eval tmux dir: %w", err))
+		}
+	}
+	return filepath.Join(dir, "tmux.sock"), func() {
+		_ = os.RemoveAll(dir)
+	}
 }
 
 // Tmux runs `tmux -S <socket> <args...>` and returns trimmed stdout. The
@@ -131,6 +151,9 @@ func (s *Sandbox) teardown() {
 		// Best-effort. A server may not be running if the test never
 		// started one.
 		_, _ = s.TmuxTry("kill-server")
+	}
+	if s.tmuxDir != "" {
+		_ = os.RemoveAll(s.tmuxDir)
 	}
 }
 

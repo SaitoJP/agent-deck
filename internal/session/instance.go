@@ -2354,6 +2354,9 @@ func (i *Instance) Start() error {
 	if i.tmuxSession == nil {
 		return fmt.Errorf("tmux session not initialized")
 	}
+	if err := PrepareConductorRoleInstructionsForStart(i); err != nil {
+		return err
+	}
 
 	// Prepare scratch CLAUDE_CONFIG_DIR for non-conductor claude workers
 	// (issue #59, v1.7.68). Runs before command-building so the
@@ -2547,6 +2550,9 @@ func (i *Instance) Start() error {
 func (i *Instance) StartWithMessage(message string) error {
 	if i.tmuxSession == nil {
 		return fmt.Errorf("tmux session not initialized")
+	}
+	if err := PrepareConductorRoleInstructionsForStart(i); err != nil {
+		return err
 	}
 
 	// Prepare scratch CLAUDE_CONFIG_DIR for non-conductor claude workers
@@ -4686,6 +4692,9 @@ func (i *Instance) Restart() error {
 		slog.Bool("tmux_session", i.tmuxSession != nil),
 		slog.Bool("tmux_exists", i.tmuxSession != nil && i.tmuxSession.Exists()),
 	)
+	if err := PrepareConductorRoleInstructionsForStart(i); err != nil {
+		return err
+	}
 
 	// Regenerate .mcp.json before restart to use socket pool if available.
 	// Skip if MCP dialog just wrote the config (avoids race condition).
@@ -5600,14 +5609,17 @@ func (i *Instance) CreateForkedOpenCodeInstanceWithOptions(
 
 // Exists checks if the tmux session still exists
 func (i *Instance) Exists() bool {
-	if i.tmuxSession == nil {
+	tmuxSession := i.GetTmuxSession()
+	if tmuxSession == nil {
 		return false
 	}
-	return i.tmuxSession.Exists()
+	return tmuxSession.Exists()
 }
 
 // GetTmuxSession returns the tmux session object
 func (i *Instance) GetTmuxSession() *tmux.Session {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 	return i.tmuxSession
 }
 

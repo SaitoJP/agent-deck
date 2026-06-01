@@ -6,6 +6,13 @@ import (
 	"testing"
 )
 
+func TestTmuxVersionCmd_SetsWaitDelay(t *testing.T) {
+	cmd := tmuxVersionCmd()
+	if cmd.WaitDelay <= 0 {
+		t.Fatalf("tmuxVersionCmd must set Cmd.WaitDelay > 0 to avoid startup hangs, got %v", cmd.WaitDelay)
+	}
+}
+
 func TestIsVulnerableTmuxVersion(t *testing.T) {
 	cases := []struct {
 		ver        string

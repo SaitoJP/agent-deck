@@ -462,8 +462,75 @@ func renderConductorClaudeTemplate(baseTemplate, name, profile string) string {
 	return renderConductorInstructionsTemplate(baseTemplate, name, profile, spec)
 }
 
+func legacyConductorInstructionsTemplate() string {
+	return strings.Replace(conductorPerNameClaudeMDTemplate, conductorRoleInstructionsOverlayChecklist, "", 1)
+}
+
+func legacySharedConductorInstructionsTemplate() string {
+	return strings.Replace(conductorSharedClaudeMDTemplate, sharedConductorRoleInstructionsOverlaySection, "", 1)
+}
+
 func matchesTemplateContent(actual, expected string) bool {
 	return strings.TrimSuffix(actual, "\n") == strings.TrimSuffix(expected, "\n")
+}
+
+func ensureManagedConductorInstructionFile(path, currentContent string, legacyContents ...string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return os.WriteFile(path, []byte(currentContent), 0o644)
+		}
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
+	actual, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if matchesTemplateContent(string(actual), currentContent) {
+		return nil
+	}
+	for _, legacyContent := range legacyContents {
+		if matchesTemplateContent(string(actual), legacyContent) {
+			return os.WriteFile(path, []byte(currentContent), 0o644)
+		}
+	}
+	return nil
+}
+
+func RefreshConductorInstructionFilesForRoleOverlay(name, profile, agent string) error {
+	spec, err := GetConductorAgentSpec(agent)
+	if err != nil {
+		return err
+	}
+	sharedRenderSpec := spec
+	if spec.InstructionsFileName == "CLAUDE.md" {
+		sharedRenderSpec = ConductorAgentSpec{
+			Agent:                "<tool>",
+			DisplayName:          "agent",
+			InstructionsFileName: "CLAUDE.md",
+		}
+	}
+	baseDir, err := ConductorDir()
+	if err != nil {
+		return err
+	}
+	sharedCurrent := renderConductorInstructionsTemplate(conductorSharedClaudeMDTemplate, "", DefaultProfile, sharedRenderSpec)
+	sharedLegacy := renderConductorInstructionsTemplate(legacySharedConductorInstructionsTemplate(), "", DefaultProfile, sharedRenderSpec)
+	if err := ensureManagedConductorInstructionFile(filepath.Join(baseDir, spec.InstructionsFileName), sharedCurrent, sharedLegacy); err != nil {
+		return err
+	}
+	dir, err := ConductorNameDir(name)
+	if err != nil {
+		return err
+	}
+	perCurrent := renderConductorInstructionsTemplate(conductorPerNameClaudeMDTemplate, name, profile, spec)
+	perLegacy := renderConductorInstructionsTemplate(legacyConductorInstructionsTemplate(), name, profile, spec)
+	perPreLearnings := renderConductorInstructionsTemplate(conductorPerNameClaudeMDPreLearningsTemplate, name, profile, spec)
+	perLegacyPolicy := renderConductorInstructionsTemplate(conductorPerNameClaudeMDLegacyTemplate, name, profile, spec)
+	return ensureManagedConductorInstructionFile(filepath.Join(dir, spec.InstructionsFileName), perCurrent, perLegacy, perPreLearnings, perLegacyPolicy)
 }
 
 // SetupConductor creates a Claude conductor for backward compatibility.

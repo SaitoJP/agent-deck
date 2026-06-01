@@ -61,11 +61,15 @@ func doCheckAndWarnTmuxVersion(probe VersionProbe, w io.Writer, goos, suppress s
 }
 
 func defaultTmuxVersionProbe() (string, error) {
-	out, err := exec.Command("tmux", "-V").CombinedOutput()
+	out, err := tmuxVersionCmd().CombinedOutput()
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func tmuxVersionCmd() *exec.Cmd {
+	return tmuxExec("", "-V")
 }
 
 var tmuxVersionRE = regexp.MustCompile(`^tmux\s+(\S+)`)
